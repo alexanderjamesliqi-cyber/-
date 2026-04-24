@@ -1,0 +1,2376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>教学交互 HTML 编辑器</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 56px 1fr;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      background: #111827;
+      color: #ffffff;
+      border-bottom: 1px solid #1f2937;
+    }
+
+    .topbar-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .topbar-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 14px;
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    button:hover {
+      background: #d1d5db;
+    }
+
+    .primary-btn {
+      background: #2563eb;
+      color: white;
+    }
+
+    .primary-btn:hover {
+      background: #1d4ed8;
+    }
+
+    .danger-btn {
+      background: #ef4444;
+      color: white;
+    }
+
+    .danger-btn:hover {
+      background: #dc2626;
+    }
+
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 230px 1fr 310px;
+      gap: 0;
+    }
+
+    .sidebar,
+    .config-panel {
+      background: #ffffff;
+      border-right: 1px solid #e5e7eb;
+      overflow-y: auto;
+    }
+
+    .config-panel {
+      border-right: none;
+      border-left: 1px solid #e5e7eb;
+    }
+
+    .panel-section {
+      padding: 16px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .panel-title {
+      font-weight: 700;
+      margin-bottom: 12px;
+      font-size: 15px;
+    }
+
+    .component-item {
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: #f9fafb;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .component-item:hover {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .component-name {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .component-desc {
+      font-size: 12px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    .editor-wrap {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: #f3f4f6;
+    }
+
+    .toolbar {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 14px;
+      background: #ffffff;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-right: 8px;
+      border-right: 1px solid #e5e7eb;
+    }
+
+    .toolbar-group:last-child {
+      border-right: none;
+    }
+
+    .toolbar button,
+    .toolbar select,
+    .toolbar input[type="color"] {
+      padding: 6px 10px;
+      font-size: 13px;
+      height: 32px;
+      width: auto;
+    }
+
+    .toolbar select {
+      min-width: 88px;
+    }
+
+    .toolbar input[type="color"] {
+      width: 38px;
+      padding: 3px;
+      cursor: pointer;
+    }
+
+    .toolbar-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 14px;
+      display: none;
+      width: 260px;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      background: #ffffff;
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+      z-index: 20;
+    }
+
+    .toolbar-popover.open {
+      display: block;
+    }
+
+    .popover-title {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .image-source-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .image-source-tabs button.active {
+      background: #2563eb;
+      color: #ffffff;
+    }
+
+    .image-source-panel {
+      display: none;
+    }
+
+    .image-source-panel.active {
+      display: block;
+    }
+
+    .inline-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .inline-actions button {
+      flex: 1;
+    }
+
+    .table-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 18px);
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .table-grid-cell {
+      width: 18px;
+      height: 18px;
+      border: 1px solid #cbd5e1;
+      border-radius: 3px;
+      background: #ffffff;
+      cursor: pointer;
+    }
+
+    .table-grid-cell.active {
+      border-color: #2563eb;
+      background: #bfdbfe;
+    }
+
+    .table-size-label {
+      font-size: 13px;
+      color: #374151;
+      min-height: 20px;
+    }
+
+    .table-tools {
+      display: none;
+    }
+
+    .table-tools.active {
+      display: flex;
+    }
+
+    .editor-scroll {
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    #editor {
+      max-width: 900px;
+      min-height: calc(100vh - 130px);
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 32px;
+      outline: none;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+      line-height: 1.8;
+    }
+
+    #editor:focus {
+      border-color: #93c5fd;
+    }
+
+    #editor h1,
+    #editor h2,
+    #editor h3 {
+      line-height: 1.35;
+    }
+
+    #editor p {
+      margin: 12px 0;
+    }
+
+    .component-block {
+      position: relative;
+      border: 2px dashed #93c5fd;
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin: 18px 0;
+      background: #eff6ff;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .component-block:active {
+      cursor: grabbing;
+    }
+
+    .component-block.selected {
+      border-color: #2563eb;
+      background: #dbeafe;
+    }
+
+    .component-block.dragging {
+      opacity: 0.45;
+    }
+
+    .component-badge {
+      display: inline-block;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #2563eb;
+      color: white;
+      margin-bottom: 8px;
+    }
+
+    .component-preview-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .component-preview-text {
+      font-size: 13px;
+      color: #374151;
+    }
+
+    .drop-hint {
+      border: 2px dashed #9ca3af;
+      color: #6b7280;
+      padding: 16px;
+      border-radius: 12px;
+      text-align: center;
+      margin: 16px 0;
+      user-select: none;
+    }
+
+    .editor-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+
+    .editor-table th,
+    .editor-table td {
+      border: 1px solid #d1d5db;
+      padding: 8px 10px;
+      min-width: 80px;
+      vertical-align: top;
+    }
+
+    .editor-table .selected-cell {
+      outline: 2px solid #2563eb;
+      outline-offset: -2px;
+      background: #eff6ff;
+    }
+
+    .editor-table th {
+      background: #f3f4f6;
+      font-weight: 700;
+    }
+
+    .image-block {
+      display: block;
+      width: var(--image-width, 70%);
+      max-width: 100%;
+      margin: 24px auto;
+      line-height: 0;
+      clear: both;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .image-block[data-align="left"] {
+      margin-left: 0;
+      margin-right: auto;
+    }
+
+    .image-block[data-align="center"] {
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .image-block[data-align="right"] {
+      margin-left: auto;
+      margin-right: 0;
+    }
+
+    .image-block[data-wrap="inline"] {
+      display: inline-block;
+      margin: 0 8px;
+      clear: none;
+      vertical-align: middle;
+    }
+
+    .image-block[data-wrap="square-left"] {
+      float: left;
+      clear: none;
+      margin: 8px 18px 12px 0;
+    }
+
+    .image-block[data-wrap="square-right"] {
+      float: right;
+      clear: none;
+      margin: 8px 0 12px 18px;
+    }
+
+    .image-frame {
+      position: relative;
+      display: block;
+      width: 100%;
+      aspect-ratio: var(--image-aspect, 1.3333);
+      line-height: 0;
+    }
+
+    .image-block[data-quarter-turn="true"] .image-frame {
+      aspect-ratio: var(--image-inverse-aspect, 0.75);
+    }
+
+    .image-block.selected .image-frame {
+      outline: 3px solid #2563eb;
+      outline-offset: 5px;
+      border-radius: 12px;
+    }
+
+    .image-block.selected .image-frame::after {
+      content: "";
+      position: absolute;
+      right: -9px;
+      bottom: -9px;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      background: #2563eb;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.24);
+    }
+
+    .editor-image {
+      max-width: 100%;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      display: block;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      border-radius: 10px;
+      transform-origin: center center;
+      object-fit: cover;
+      translate: -50% -50%;
+    }
+
+    .image-block[data-quarter-turn="true"] .editor-image {
+      max-width: none;
+    }
+
+    .image-config-card {
+      display: grid;
+      gap: 14px;
+    }
+
+    .config-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .config-field label {
+      margin: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .config-value {
+      color: #2563eb;
+      font-weight: 700;
+    }
+
+    .segmented-control {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+
+    .segmented-control button.active {
+      background: #2563eb;
+      color: #ffffff;
+    }
+
+    .button-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .config-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin: 12px 0 6px;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      background: white;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: #2563eb;
+    }
+
+    textarea {
+      min-height: 86px;
+      resize: vertical;
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: #6b7280;
+      line-height: 1.5;
+      margin-top: 8px;
+    }
+
+    .small-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .empty-config {
+      color: #6b7280;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .modal-mask {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(17, 24, 39, 0.65);
+      z-index: 100;
+    }
+
+    .modal {
+      width: min(1100px, 92vw);
+      height: min(760px, 88vh);
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: 52px 1fr;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid #e5e7eb;
+      font-weight: 700;
+    }
+
+    .modal-body {
+      overflow: auto;
+      background: #f9fafb;
+    }
+
+    .modal iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: white;
+    }
+
+    .code-output {
+      width: 100%;
+      height: 100%;
+      border: none;
+      padding: 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      resize: none;
+    }
+
+    @media (max-width: 960px) {
+      .main {
+        grid-template-columns: 180px 1fr;
+      }
+      .config-panel {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-title">教学交互 HTML 编辑器</div>
+      <div class="topbar-actions">
+        <button onclick="previewHtml()">预览</button>
+        <button onclick="showSourceHtml()">查看源码</button>
+        <button class="primary-btn" onclick="downloadHtml()">导出 HTML</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <aside class="sidebar">
+        <div class="panel-section">
+          <div class="component-item" draggable="true" data-type="function-plot">
+            <div class="component-name">函数绘图仪</div>
+            <div class="component-desc">绘制 y=f(x) 的函数图像，适合数学教学。</div>
+          </div>
+
+          <div class="component-item" draggable="true" data-type="choice-question">
+            <div class="component-name">选择题表单</div>
+            <div class="component-desc">支持选项、答案判断和反馈提示。</div>
+          </div>
+
+          <div class="component-item" draggable="true" data-type="fill-blank">
+            <div class="component-name">填空题</div>
+            <div class="component-desc">学生输入答案后自动判断。</div>
+          </div>
+
+          <div class="component-item" draggable="true" data-type="info-card">
+            <div class="component-name">知识卡片</div>
+            <div class="component-desc">插入重点知识、提示或拓展链接。</div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="editor-wrap">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <select onchange="formatText(this.value); this.selectedIndex = 0;" title="段落格式">
+              <option value="">格式</option>
+              <option value="h1">标题 1</option>
+              <option value="h2">标题 2</option>
+              <option value="h3">标题 3</option>
+              <option value="p">正文</option>
+              <option value="blockquote">引用</option>
+            </select>
+            <select onchange="runCommand('fontSize', this.value); this.selectedIndex = 0;" title="字号">
+              <option value="">字号</option>
+              <option value="2">小</option>
+              <option value="3">正常</option>
+              <option value="5">大</option>
+              <option value="7">特大</option>
+            </select>
+          </div>
+
+          <div class="toolbar-group">
+            <button onclick="runCommand('bold')" title="加粗"><strong>B</strong></button>
+            <button onclick="runCommand('italic')" title="斜体"><em>I</em></button>
+            <button onclick="runCommand('underline')" title="下划线"><u>U</u></button>
+            <button onclick="runCommand('strikeThrough')" title="删除线"><s>S</s></button>
+            <input type="color" value="#111827" onchange="runCommand('foreColor', this.value)" title="文字颜色">
+            <input type="color" value="#ffffff" onchange="runCommand('hiliteColor', this.value)" title="背景颜色">
+          </div>
+
+          <div class="toolbar-group">
+            <button onclick="runCommand('insertUnorderedList')" title="项目列表">项目列表</button>
+            <button onclick="runCommand('insertOrderedList')" title="编号列表">编号列表</button>
+            <button onclick="runCommand('justifyLeft')" title="左对齐">左对齐</button>
+            <button onclick="runCommand('justifyCenter')" title="居中">居中</button>
+            <button onclick="runCommand('justifyRight')" title="右对齐">右对齐</button>
+          </div>
+
+          <div class="toolbar-group">
+            <button onclick="insertParagraph()">段落</button>
+            <button onclick="insertLink()">链接</button>
+            <button onclick="toggleImageMenu()">图片</button>
+            <button onclick="toggleTablePicker()">表格</button>
+            <button onclick="insertDivider()">分割线</button>
+          </div>
+
+          <div id="table-tools" class="toolbar-group table-tools">
+            <button onclick="insertTableRow('above')">上方插行</button>
+            <button onclick="insertTableRow('below')">下方插行</button>
+            <button onclick="insertTableColumn('left')">左侧插列</button>
+            <button onclick="insertTableColumn('right')">右侧插列</button>
+            <button onclick="deleteTableRow()">删行</button>
+            <button onclick="deleteTableColumn()">删列</button>
+            <button onclick="deleteTable()">删表</button>
+          </div>
+
+          <div class="toolbar-group">
+            <button onclick="runCommand('undo')" title="撤销">撤销</button>
+            <button onclick="runCommand('redo')" title="重做">重做</button>
+            <button onclick="runCommand('removeFormat')" title="清除格式">清格式</button>
+            <button onclick="clearSelection()">取消选择</button>
+          </div>
+          <input id="image-input" type="file" accept="image/*" hidden>
+
+          <div id="image-menu" class="toolbar-popover">
+            <div class="popover-title">插入图片</div>
+            <div class="image-source-tabs">
+              <button id="image-local-tab" class="active" onclick="setImageSource('local')">本地图片</button>
+              <button id="image-url-tab" onclick="setImageSource('url')">图片 URL</button>
+            </div>
+            <div id="image-local-panel" class="image-source-panel active">
+              <button class="primary-btn" onclick="triggerImageInsert()">选择本地图片</button>
+              <div class="help-text">本地图片会自动转为 base64 写入页面，导出后可离线显示。</div>
+            </div>
+            <div id="image-url-panel" class="image-source-panel">
+              <input id="image-url-input" placeholder="https://example.com/image.png">
+              <input id="image-alt-input" placeholder="图片说明，可选">
+              <div class="inline-actions">
+                <button class="primary-btn" onclick="insertImageUrl()">插入 URL</button>
+                <button onclick="closeToolbarPopovers()">取消</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="table-picker" class="toolbar-popover">
+            <div class="popover-title">插入表格</div>
+            <div id="table-grid" class="table-grid"></div>
+            <div id="table-size-label" class="table-size-label">移动鼠标选择行列</div>
+            <div class="inline-actions">
+              <button onclick="insertCustomTable()">自定义行列</button>
+              <button onclick="closeToolbarPopovers()">取消</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-scroll">
+          <div id="editor" contenteditable="true">
+            <h1>一次函数图像学习</h1>
+            <p>请阅读下面的内容，并观察函数图像的变化。</p>
+            <p>完成观察后，请回答后面的问题。</p>
+          </div>
+        </div>
+      </section>
+
+      <aside class="config-panel">
+        <div class="panel-section">
+          <div class="panel-title">组件配置</div>
+          <div id="config-content" class="empty-config">
+            请先点击编辑区中的组件。<br>
+            选中后可以修改题目、函数表达式、答案等参数。
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="modal-mask" class="modal-mask">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="modal-title">预览</span>
+        <div>
+          <button onclick="closeModal()">关闭</button>
+        </div>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script>
+    const editor = document.getElementById("editor");
+    const configContent = document.getElementById("config-content");
+    const imageInput = document.getElementById("image-input");
+    const imageMenu = document.getElementById("image-menu");
+    const tablePicker = document.getElementById("table-picker");
+    const tableGrid = document.getElementById("table-grid");
+    const tableSizeLabel = document.getElementById("table-size-label");
+    const tableTools = document.getElementById("table-tools");
+    const dropHintText = "可以从左侧拖入“函数绘图仪”“选择题表单”等交互组件";
+    let selectedComponentId = null;
+    let selectedImage = null;
+    let selectedImageBlock = null;
+    let componentData = {};
+    let draggedComponentId = null;
+    let selectedTableCell = null;
+    let tablePickerRows = 0;
+    let tablePickerCols = 0;
+
+    const componentRegistry = {
+      "function-plot": {
+        name: "函数绘图仪",
+        defaultConfig: {
+          title: "函数绘图仪",
+          expression: "x",
+          xMin: -10,
+          xMax: 10,
+          yMin: -10,
+          yMax: 10
+        },
+        renderEditor(config, id) {
+          return `
+            <div class="component-block" contenteditable="false" draggable="true" data-component-id="${id}" data-component-type="function-plot">
+              <div class="component-badge">函数绘图仪</div>
+              <div class="component-preview-title">${escapeHtml(config.title)}</div>
+              <div class="component-preview-text">函数：y = ${escapeHtml(config.expression)}，x ∈ [${config.xMin}, ${config.xMax}]</div>
+            </div>
+          `;
+        },
+        renderExport(config, id) {
+          return `
+            <section class="interactive-card function-plot-card" id="${id}">
+              <h3>${escapeHtml(config.title)}</h3>
+              <canvas class="plot-canvas" width="680" height="380"
+                data-expression="${escapeAttr(config.expression)}"
+                data-x-min="${escapeAttr(config.xMin)}"
+                data-x-max="${escapeAttr(config.xMax)}"
+                data-y-min="${escapeAttr(config.yMin)}"
+                data-y-max="${escapeAttr(config.yMax)}"></canvas>
+              <p class="plot-expression">y = ${escapeHtml(config.expression)}</p>
+            </section>
+          `;
+        }
+      },
+
+      "choice-question": {
+        name: "选择题表单",
+        defaultConfig: {
+          question: "函数 y = 2x + 1 的斜率是多少？",
+          options: ["1", "2", "-1", "0"],
+          answer: "2",
+          correctFeedback: "回答正确！",
+          wrongFeedback: "回答错误，请再试一次。"
+        },
+        renderEditor(config, id) {
+          return `
+            <div class="component-block" contenteditable="false" draggable="true" data-component-id="${id}" data-component-type="choice-question">
+              <div class="component-badge">选择题</div>
+              <div class="component-preview-title">${escapeHtml(config.question)}</div>
+              <div class="component-preview-text">选项：${config.options.map(escapeHtml).join(" / ")}</div>
+            </div>
+          `;
+        },
+        renderExport(config, id) {
+          const optionsHtml = config.options.map((opt, index) => `
+            <label class="option-line">
+              <input type="radio" name="${id}" value="${escapeAttr(opt)}">
+              <span>${String.fromCharCode(65 + index)}. ${escapeHtml(opt)}</span>
+            </label>
+          `).join("");
+
+          return `
+            <section class="interactive-card choice-card" id="${id}" data-answer="${escapeAttr(config.answer)}" data-correct="${escapeAttr(config.correctFeedback)}" data-wrong="${escapeAttr(config.wrongFeedback)}">
+              <h3>${escapeHtml(config.question)}</h3>
+              <div class="options">${optionsHtml}</div>
+              <button class="submit-btn" onclick="checkChoice('${id}')">提交</button>
+              <p class="feedback"></p>
+            </section>
+          `;
+        }
+      },
+
+      "fill-blank": {
+        name: "填空题",
+        defaultConfig: {
+          question: "请填写函数 y = 3x + 2 的斜率。",
+          answer: "3",
+          placeholder: "请输入答案",
+          correctFeedback: "回答正确！",
+          wrongFeedback: "回答错误，请检查后再试。"
+        },
+        renderEditor(config, id) {
+          return `
+            <div class="component-block" contenteditable="false" draggable="true" data-component-id="${id}" data-component-type="fill-blank">
+              <div class="component-badge">填空题</div>
+              <div class="component-preview-title">${escapeHtml(config.question)}</div>
+              <div class="component-preview-text">答案：${escapeHtml(config.answer)}</div>
+            </div>
+          `;
+        },
+        renderExport(config, id) {
+          return `
+            <section class="interactive-card fill-card" id="${id}" data-answer="${escapeAttr(config.answer)}" data-correct="${escapeAttr(config.correctFeedback)}" data-wrong="${escapeAttr(config.wrongFeedback)}">
+              <h3>${escapeHtml(config.question)}</h3>
+              <input class="fill-input" placeholder="${escapeAttr(config.placeholder)}">
+              <button class="submit-btn" onclick="checkFillBlank('${id}')">提交</button>
+              <p class="feedback"></p>
+            </section>
+          `;
+        }
+      },
+
+      "info-card": {
+        name: "知识卡片",
+        defaultConfig: {
+          title: "知识提示",
+          content: "这里可以填写重点知识、操作提示或拓展说明。"
+        },
+        renderEditor(config, id) {
+          return `
+            <div class="component-block" contenteditable="false" draggable="true" data-component-id="${id}" data-component-type="info-card">
+              <div class="component-badge">知识卡片</div>
+              <div class="component-preview-title">${escapeHtml(config.title)}</div>
+              <div class="component-preview-text">${escapeHtml(config.content)}</div>
+            </div>
+          `;
+        },
+        renderExport(config, id) {
+          return `
+            <section class="interactive-card info-card" id="${id}">
+              <h3>${escapeHtml(config.title)}</h3>
+              <p>${escapeHtml(config.content)}</p>
+            </section>
+          `;
+        }
+      }
+    };
+
+    document.querySelectorAll(".component-item").forEach(item => {
+      item.addEventListener("dragstart", event => {
+        event.dataTransfer.setData("component-type", item.dataset.type);
+        event.dataTransfer.effectAllowed = "copy";
+      });
+    });
+
+    editor.addEventListener("dragstart", event => {
+      const block = event.target.closest(".component-block");
+      if (!block) return;
+
+      draggedComponentId = block.dataset.componentId;
+      event.dataTransfer.setData("editor-component-id", draggedComponentId);
+      event.dataTransfer.effectAllowed = "move";
+      block.classList.add("dragging");
+      selectComponent(draggedComponentId);
+    });
+
+    editor.addEventListener("dragend", event => {
+      const block = event.target.closest(".component-block");
+      if (block) block.classList.remove("dragging");
+      draggedComponentId = null;
+    });
+
+    editor.addEventListener("dragover", event => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = Array.from(event.dataTransfer.types).includes("editor-component-id") ? "move" : "copy";
+    });
+
+    editor.addEventListener("drop", event => {
+      event.preventDefault();
+
+      const movedId = event.dataTransfer.getData("editor-component-id");
+      if (movedId) {
+        moveComponentBlock(movedId, event.clientY);
+        return;
+      }
+
+      const type = event.dataTransfer.getData("component-type");
+      if (!type || !componentRegistry[type]) return;
+
+      editor.focus();
+      removeDropHint();
+
+      const id = "comp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      const config = deepClone(componentRegistry[type].defaultConfig);
+
+      componentData[id] = { id, type, config };
+
+      insertHtmlAtEditorBlockPosition(componentRegistry[type].renderEditor(config, id), event.clientY);
+      selectComponent(id);
+      updateDropHint();
+    });
+
+    editor.addEventListener("input", updateDropHint);
+
+    editor.addEventListener("focus", () => {
+      if (isEditorEmpty()) removeDropHint();
+    });
+
+    editor.addEventListener("blur", updateDropHint);
+
+    editor.addEventListener("click", event => {
+      const block = event.target.closest(".component-block");
+      const cell = event.target.closest("td, th");
+      const imageBlock = event.target.closest(".image-block");
+      const image = event.target.closest(".editor-image") || imageBlock?.querySelector(".editor-image");
+
+      if (image && editor.contains(image)) {
+        event.preventDefault();
+        selectImage(image);
+        return;
+      }
+
+      if (cell && editor.contains(cell)) {
+        selectTableCell(cell);
+      } else if (!event.target.closest(".editor-table")) {
+        clearTableSelection();
+      }
+
+      if (block) {
+        event.preventDefault();
+        selectComponent(block.dataset.componentId);
+        return;
+      }
+
+      clearImageSelection();
+    });
+
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".toolbar")) closeToolbarPopovers();
+    });
+
+    editor.addEventListener("keyup", updateTableToolsFromSelection);
+    editor.addEventListener("mouseup", updateTableToolsFromSelection);
+    window.addEventListener("resize", () => {
+      editor.querySelectorAll(".image-block").forEach(syncImageFrameSize);
+    });
+
+    buildTablePicker();
+
+    function selectComponent(id) {
+      clearImageSelection(false);
+      clearTableSelection();
+      selectedComponentId = id;
+      document.querySelectorAll(".component-block").forEach(block => {
+        block.classList.toggle("selected", block.dataset.componentId === id);
+      });
+      showConfigPanel(id);
+    }
+
+    function clearSelection() {
+      selectedComponentId = null;
+      document.querySelectorAll(".component-block").forEach(block => block.classList.remove("selected"));
+      clearImageSelection(false);
+      clearTableSelection();
+      configContent.className = "empty-config";
+      configContent.innerHTML = "请先点击编辑区中的组件。<br>选中后可以修改题目、函数表达式、答案等参数。";
+    }
+
+    function selectImage(image) {
+      selectedComponentId = null;
+      document.querySelectorAll(".component-block").forEach(block => block.classList.remove("selected"));
+      clearTableSelection();
+      clearImageSelection(false);
+      selectedImageBlock = ensureImageBlock(image);
+      selectedImage = selectedImageBlock.querySelector(".editor-image");
+      applyImageTransform(
+        selectedImageBlock,
+        getImageWidthPercent(selectedImageBlock),
+        getImageRotation(selectedImageBlock),
+        getImageAlignment(selectedImageBlock),
+        getImageWrap(selectedImageBlock)
+      );
+      selectedImageBlock.classList.add("selected");
+      showImageConfig();
+    }
+
+    function ensureImageBlock(image) {
+      const existingBlock = image.closest(".image-block");
+      if (existingBlock) {
+        ensureImageFrame(existingBlock);
+        updateImageMetrics(existingBlock);
+        return existingBlock;
+      }
+
+      const block = document.createElement("figure");
+      block.className = "image-block";
+      block.contentEditable = "false";
+      block.dataset.width = image.dataset.width || "100";
+      block.dataset.rotation = image.dataset.rotation || "0";
+      block.dataset.align = image.dataset.align || "center";
+      block.dataset.wrap = image.dataset.wrap || "top-bottom";
+      image.before(block);
+      const frame = document.createElement("span");
+      frame.className = "image-frame";
+      block.appendChild(frame);
+      frame.appendChild(image);
+      image.classList.add("editor-image");
+      image.removeAttribute("data-width");
+      image.removeAttribute("data-rotation");
+      image.removeAttribute("data-align");
+      image.removeAttribute("data-wrap");
+      updateImageMetrics(block);
+      return block;
+    }
+
+    function ensureImageFrame(imageBlock) {
+      if (imageBlock.querySelector(".image-frame")) return;
+      const image = imageBlock.querySelector(".editor-image");
+      if (!image) return;
+      const frame = document.createElement("span");
+      frame.className = "image-frame";
+      image.before(frame);
+      frame.appendChild(image);
+    }
+
+    function clearImageSelection(resetPanel = true) {
+      if (selectedImageBlock) selectedImageBlock.classList.remove("selected");
+      selectedImage = null;
+      selectedImageBlock = null;
+
+      if (resetPanel) {
+        configContent.className = "empty-config";
+        configContent.innerHTML = "请先点击编辑区中的组件或图片。<br>选中后可以修改参数。";
+      }
+    }
+
+    function showImageConfig() {
+      if (!selectedImage || !selectedImageBlock) return;
+
+      configContent.className = "";
+      const width = getImageWidthPercent(selectedImageBlock);
+      const rotation = getImageRotation(selectedImageBlock);
+      const alignment = getImageAlignment(selectedImageBlock);
+      const wrap = getImageWrap(selectedImageBlock);
+
+      configContent.innerHTML = `
+        <div class="image-config-card">
+          <div class="config-field">
+            <label>图片说明</label>
+            <input id="cfg-image-alt" value="${escapeAttr(selectedImage.alt || "")}">
+          </div>
+
+          <div class="config-field">
+            <label>
+              <span>宽度</span>
+              <span class="config-value"><span id="cfg-image-width-value">${width}</span>%</span>
+            </label>
+            <input id="cfg-image-width" type="range" min="10" max="100" step="1" value="${width}" oninput="previewImageWidth(this.value)">
+          </div>
+
+          <div class="config-field">
+            <label>
+              <span>旋转</span>
+              <span class="config-value"><span id="cfg-image-rotation-value">${rotation}</span>°</span>
+            </label>
+            <input id="cfg-image-rotation" type="range" min="-180" max="180" step="90" value="${rotation}" oninput="previewImageRotation(this.value)">
+          </div>
+
+          <div class="config-field">
+            <label>版式</label>
+            <div class="segmented-control wrap-control">
+              <button class="${wrap === "inline" ? "active" : ""}" onclick="setImageWrap('inline')">嵌入型</button>
+              <button class="${wrap === "top-bottom" ? "active" : ""}" onclick="setImageWrap('top-bottom')">上下型</button>
+              <button class="${wrap === "square-left" ? "active" : ""}" onclick="setImageWrap('square-left')">左环绕</button>
+              <button class="${wrap === "square-right" ? "active" : ""}" onclick="setImageWrap('square-right')">右环绕</button>
+            </div>
+          </div>
+
+          <div class="config-field">
+            <label>位置</label>
+            <div class="segmented-control">
+              <button class="${alignment === "left" ? "active" : ""}" onclick="setImageAlignment('left')">左</button>
+              <button class="${alignment === "center" ? "active" : ""}" onclick="setImageAlignment('center')">居中</button>
+              <button class="${alignment === "right" ? "active" : ""}" onclick="setImageAlignment('right')">右</button>
+            </div>
+          </div>
+
+          <div class="button-grid">
+            <button onclick="rotateSelectedImage(-90)">左转 90°</button>
+            <button onclick="rotateSelectedImage(90)">右转 90°</button>
+          </div>
+
+          <div class="config-actions">
+            <button class="primary-btn" onclick="saveImageConfig()">保存</button>
+            <button onclick="resetImageConfig()">重置</button>
+            <button class="danger-btn" onclick="deleteSelectedImage()">删除</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function showConfigPanel(id) {
+      const data = componentData[id];
+      if (!data) return;
+
+      const { type, config } = data;
+      configContent.className = "";
+
+      if (type === "function-plot") {
+        configContent.innerHTML = `
+          <label>标题</label>
+          <input id="cfg-title" value="${escapeAttr(config.title)}">
+
+          <label>函数表达式 y =</label>
+          <input id="cfg-expression" value="${escapeAttr(config.expression)}">
+          <div class="help-text">支持 x、Math.sin(x)、x*x、Math.pow(x,2) 等 JavaScript 表达式。</div>
+
+          <div class="small-row">
+            <div>
+              <label>x 最小值</label>
+              <input id="cfg-x-min" type="number" value="${escapeAttr(config.xMin)}">
+            </div>
+            <div>
+              <label>x 最大值</label>
+              <input id="cfg-x-max" type="number" value="${escapeAttr(config.xMax)}">
+            </div>
+          </div>
+
+          <div class="small-row">
+            <div>
+              <label>y 最小值</label>
+              <input id="cfg-y-min" type="number" value="${escapeAttr(config.yMin)}">
+            </div>
+            <div>
+              <label>y 最大值</label>
+              <input id="cfg-y-max" type="number" value="${escapeAttr(config.yMax)}">
+            </div>
+          </div>
+
+          <button class="primary-btn" onclick="saveFunctionPlotConfig('${id}')">保存配置</button>
+          <button class="danger-btn" onclick="deleteComponent('${id}')">删除组件</button>
+        `;
+      }
+
+      if (type === "choice-question") {
+        configContent.innerHTML = `
+          <label>题目</label>
+          <textarea id="cfg-question">${escapeHtml(config.question)}</textarea>
+
+          <label>选项，每行一个</label>
+          <textarea id="cfg-options">${config.options.map(escapeHtml).join("\n")}</textarea>
+
+          <label>正确答案</label>
+          <input id="cfg-answer" value="${escapeAttr(config.answer)}">
+
+          <label>正确反馈</label>
+          <input id="cfg-correct" value="${escapeAttr(config.correctFeedback)}">
+
+          <label>错误反馈</label>
+          <input id="cfg-wrong" value="${escapeAttr(config.wrongFeedback)}">
+
+          <button class="primary-btn" onclick="saveChoiceConfig('${id}')">保存配置</button>
+          <button class="danger-btn" onclick="deleteComponent('${id}')">删除组件</button>
+        `;
+      }
+
+      if (type === "fill-blank") {
+        configContent.innerHTML = `
+          <label>题目</label>
+          <textarea id="cfg-question">${escapeHtml(config.question)}</textarea>
+
+          <label>正确答案</label>
+          <input id="cfg-answer" value="${escapeAttr(config.answer)}">
+
+          <label>输入框提示</label>
+          <input id="cfg-placeholder" value="${escapeAttr(config.placeholder)}">
+
+          <label>正确反馈</label>
+          <input id="cfg-correct" value="${escapeAttr(config.correctFeedback)}">
+
+          <label>错误反馈</label>
+          <input id="cfg-wrong" value="${escapeAttr(config.wrongFeedback)}">
+
+          <button class="primary-btn" onclick="saveFillConfig('${id}')">保存配置</button>
+          <button class="danger-btn" onclick="deleteComponent('${id}')">删除组件</button>
+        `;
+      }
+
+      if (type === "info-card") {
+        configContent.innerHTML = `
+          <label>标题</label>
+          <input id="cfg-title" value="${escapeAttr(config.title)}">
+
+          <label>内容</label>
+          <textarea id="cfg-content">${escapeHtml(config.content)}</textarea>
+
+          <button class="primary-btn" onclick="saveInfoCardConfig('${id}')">保存配置</button>
+          <button class="danger-btn" onclick="deleteComponent('${id}')">删除组件</button>
+        `;
+      }
+    }
+
+    function saveFunctionPlotConfig(id) {
+      const data = componentData[id];
+      data.config.title = document.getElementById("cfg-title").value;
+      data.config.expression = document.getElementById("cfg-expression").value;
+      data.config.xMin = Number(document.getElementById("cfg-x-min").value);
+      data.config.xMax = Number(document.getElementById("cfg-x-max").value);
+      data.config.yMin = Number(document.getElementById("cfg-y-min").value);
+      data.config.yMax = Number(document.getElementById("cfg-y-max").value);
+      refreshComponent(id);
+    }
+
+    function saveChoiceConfig(id) {
+      const data = componentData[id];
+      data.config.question = document.getElementById("cfg-question").value;
+      data.config.options = document.getElementById("cfg-options").value.split("\n").map(s => s.trim()).filter(Boolean);
+      data.config.answer = document.getElementById("cfg-answer").value;
+      data.config.correctFeedback = document.getElementById("cfg-correct").value;
+      data.config.wrongFeedback = document.getElementById("cfg-wrong").value;
+      refreshComponent(id);
+    }
+
+    function saveFillConfig(id) {
+      const data = componentData[id];
+      data.config.question = document.getElementById("cfg-question").value;
+      data.config.answer = document.getElementById("cfg-answer").value;
+      data.config.placeholder = document.getElementById("cfg-placeholder").value;
+      data.config.correctFeedback = document.getElementById("cfg-correct").value;
+      data.config.wrongFeedback = document.getElementById("cfg-wrong").value;
+      refreshComponent(id);
+    }
+
+    function saveInfoCardConfig(id) {
+      const data = componentData[id];
+      data.config.title = document.getElementById("cfg-title").value;
+      data.config.content = document.getElementById("cfg-content").value;
+      refreshComponent(id);
+    }
+
+    function refreshComponent(id) {
+      const data = componentData[id];
+      const block = editor.querySelector(`[data-component-id="${id}"]`);
+      if (!data || !block) return;
+
+      block.outerHTML = componentRegistry[data.type].renderEditor(data.config, id);
+      selectComponent(id);
+    }
+
+    function deleteComponent(id) {
+      const block = editor.querySelector(`[data-component-id="${id}"]`);
+      if (block) block.remove();
+      delete componentData[id];
+      clearSelection();
+      updateDropHint();
+    }
+
+    function insertHtmlAtCursor(html) {
+      removeDropHint();
+      const selection = window.getSelection();
+
+      if (!selection.rangeCount || !editor.contains(selection.anchorNode)) {
+        editor.insertAdjacentHTML("beforeend", html);
+        updateDropHint();
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+
+      const temp = document.createElement("div");
+      temp.innerHTML = html;
+
+      const fragment = document.createDocumentFragment();
+      let node;
+      let lastNode;
+
+      while ((node = temp.firstChild)) {
+        lastNode = fragment.appendChild(node);
+      }
+
+      range.insertNode(fragment);
+
+      if (lastNode) {
+        range.setStartAfter(lastNode);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      updateDropHint();
+    }
+
+    function insertHtmlAtPoint(html, x, y) {
+      const range = getRangeFromPoint(x, y);
+      if (!range) {
+        editor.insertAdjacentHTML("beforeend", html);
+        return;
+      }
+
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      insertHtmlAtCursor(html);
+    }
+
+    function insertHtmlAtEditorBlockPosition(html, y) {
+      const temp = document.createElement("div");
+      temp.innerHTML = html;
+      const nodes = [...temp.childNodes];
+      const target = getEditorChildDropTarget(y, null);
+
+      if (!target) {
+        editor.append(...nodes);
+      } else if (target.position === "before") {
+        target.element.before(...nodes);
+      } else {
+        target.element.after(...nodes);
+      }
+    }
+
+    function getRangeFromPoint(x, y) {
+      let range = null;
+
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(x, y);
+      } else if (document.caretPositionFromPoint) {
+        const position = document.caretPositionFromPoint(x, y);
+        if (position) {
+          range = document.createRange();
+          range.setStart(position.offsetNode, position.offset);
+          range.collapse(true);
+        }
+      }
+
+      if (!range || !editor.contains(range.startContainer)) return null;
+
+      const componentBlock = range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? range.startContainer.closest?.(".component-block")
+        : range.startContainer.parentElement?.closest(".component-block");
+
+      if (componentBlock) {
+        const rect = componentBlock.getBoundingClientRect();
+        range = document.createRange();
+        if (y < rect.top + rect.height / 2) {
+          range.setStartBefore(componentBlock);
+        } else {
+          range.setStartAfter(componentBlock);
+        }
+        range.collapse(true);
+      }
+
+      return range;
+    }
+
+    function moveComponentBlock(id, y) {
+      const block = editor.querySelector(`[data-component-id="${id}"]`);
+      if (!block) return;
+
+      const target = getEditorChildDropTarget(y, block);
+      if (!target) {
+        editor.appendChild(block);
+      } else if (target.position === "before") {
+        editor.insertBefore(block, target.element);
+      } else {
+        target.element.after(block);
+      }
+
+      block.classList.remove("dragging");
+      selectComponent(id);
+      updateDropHint();
+    }
+
+    function getEditorChildDropTarget(y, draggedBlock) {
+      const elements = [...editor.children].filter(element => element !== draggedBlock);
+
+      if (!elements.length) return null;
+
+      let closest = null;
+      let closestDistance = Infinity;
+
+      elements.forEach(element => {
+        const rect = element.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        const distance = Math.abs(y - midpoint);
+
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closest = {
+            element,
+            position: y < midpoint ? "before" : "after"
+          };
+        }
+      });
+
+      return closest;
+    }
+
+    function formatText(tag) {
+      document.execCommand("formatBlock", false, tag);
+      editor.focus();
+    }
+
+    function runCommand(command, value = null) {
+      editor.focus();
+      removeDropHint();
+      document.execCommand(command, false, value);
+      updateDropHint();
+    }
+
+    function insertParagraph() {
+      insertHtmlAtCursor("<p>请输入新的教学内容。</p>");
+    }
+
+    function insertLink() {
+      const url = prompt("请输入链接地址", "https://");
+      if (!url) return;
+      runCommand("createLink", url);
+    }
+
+    function insertDivider() {
+      insertHtmlAtCursor("<hr>");
+    }
+
+    function toggleImageMenu() {
+      const shouldOpen = !imageMenu.classList.contains("open");
+      closeToolbarPopovers();
+      if (shouldOpen) imageMenu.classList.add("open");
+    }
+
+    function setImageSource(source) {
+      document.getElementById("image-local-tab").classList.toggle("active", source === "local");
+      document.getElementById("image-url-tab").classList.toggle("active", source === "url");
+      document.getElementById("image-local-panel").classList.toggle("active", source === "local");
+      document.getElementById("image-url-panel").classList.toggle("active", source === "url");
+    }
+
+    function triggerImageInsert() {
+      imageInput.value = "";
+      imageInput.click();
+    }
+
+    imageInput.addEventListener("change", event => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const alt = escapeAttr(file.name.replace(/\.[^.]+$/, "") || "教学图片");
+        insertHtmlAtCursor(createImageBlockHtml(reader.result, alt));
+        closeToolbarPopovers();
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function insertImageUrl() {
+      const urlInput = document.getElementById("image-url-input");
+      const altInput = document.getElementById("image-alt-input");
+      const url = urlInput.value.trim();
+      if (!url) return;
+
+      const alt = altInput.value.trim() || "教学图片";
+      insertHtmlAtCursor(createImageBlockHtml(escapeAttr(url), escapeAttr(alt)));
+      urlInput.value = "";
+      altInput.value = "";
+      closeToolbarPopovers();
+    }
+
+    function createImageBlockHtml(src, alt) {
+      return `
+        <figure class="image-block" contenteditable="false" data-width="70" data-rotation="0" data-align="center" data-wrap="top-bottom" style="width: 70%; --image-width: 70%; margin-left: auto; margin-right: auto;">
+          <span class="image-frame">
+            <img class="editor-image" src="${src}" alt="${alt}" style="transform: rotate(0deg);">
+          </span>
+        </figure>
+      `;
+    }
+
+    function getImageWidthPercent(imageBlock) {
+      const storedWidth = Number.parseInt(imageBlock.dataset.width, 10);
+      if (Number.isFinite(storedWidth)) return clampInteger(storedWidth, 10, 100);
+
+      const inlineWidth = Number.parseInt(imageBlock.style.width, 10);
+      if (Number.isFinite(inlineWidth)) return clampInteger(inlineWidth, 10, 100);
+
+      return 100;
+    }
+
+    function getImageRotation(imageBlock) {
+      const storedRotation = Number.parseInt(imageBlock.dataset.rotation, 10);
+      if (Number.isFinite(storedRotation)) return clampInteger(storedRotation, -180, 180);
+
+      const image = imageBlock.querySelector(".editor-image");
+      const match = image.style.transform.match(/rotate\\((-?\\d+)deg\\)/);
+      return match ? clampInteger(match[1], -180, 180) : 0;
+    }
+
+    function getImageAlignment(imageBlock) {
+      return ["left", "center", "right"].includes(imageBlock.dataset.align) ? imageBlock.dataset.align : "center";
+    }
+
+    function getImageWrap(imageBlock) {
+      return ["inline", "top-bottom", "square-left", "square-right"].includes(imageBlock.dataset.wrap) ? imageBlock.dataset.wrap : "top-bottom";
+    }
+
+    function normalizeRotation(rotation) {
+      let normalized = Number(rotation);
+      if (!Number.isFinite(normalized)) return 0;
+      normalized = Math.round(normalized / 90) * 90;
+      normalized = ((normalized % 360) + 360) % 360;
+      if (normalized > 180) normalized -= 360;
+      return normalized;
+    }
+
+    function isQuarterTurn(rotation) {
+      const normalized = Math.abs(normalizeRotation(rotation));
+      return normalized === 90 || normalized === 270;
+    }
+
+    function updateImageMetrics(imageBlock) {
+      const image = imageBlock.querySelector(".editor-image");
+      if (!image) return;
+
+      const apply = () => {
+        const aspect = image.naturalWidth && image.naturalHeight ? image.naturalWidth / image.naturalHeight : 1.3333;
+        imageBlock.style.setProperty("--image-aspect", aspect.toFixed(5));
+        imageBlock.style.setProperty("--image-inverse-aspect", (1 / aspect).toFixed(5));
+      };
+
+      if (image.complete) {
+        apply();
+        syncImageFrameSize(imageBlock);
+      } else {
+        image.addEventListener("load", () => {
+          apply();
+          syncImageFrameSize(imageBlock);
+        }, { once: true });
+      }
+    }
+
+    function syncImageFrameSize(imageBlock) {
+      const image = imageBlock.querySelector(".editor-image");
+      const frame = imageBlock.querySelector(".image-frame");
+      if (!image || !frame) return;
+
+      requestAnimationFrame(() => {
+        if (isQuarterTurn(getImageRotation(imageBlock))) {
+          const rect = frame.getBoundingClientRect();
+          image.style.width = `${rect.height}px`;
+          image.style.height = `${rect.width}px`;
+        } else {
+          image.style.width = "100%";
+          image.style.height = "100%";
+        }
+      });
+    }
+
+    function applyImageTransform(imageBlock, width, rotation, alignment = getImageAlignment(imageBlock), wrap = getImageWrap(imageBlock)) {
+      const safeWidth = clampInteger(width, 10, 100) || 100;
+      const safeRotation = normalizeRotation(clampInteger(rotation, -180, 180) || 0);
+      const safeAlignment = ["left", "center", "right"].includes(alignment) ? alignment : "center";
+      const safeWrap = ["inline", "top-bottom", "square-left", "square-right"].includes(wrap) ? wrap : "top-bottom";
+      const image = imageBlock.querySelector(".editor-image");
+      ensureImageFrame(imageBlock);
+      updateImageMetrics(imageBlock);
+      imageBlock.dataset.width = safeWidth;
+      imageBlock.dataset.rotation = safeRotation;
+      imageBlock.dataset.align = safeAlignment;
+      imageBlock.dataset.wrap = safeWrap;
+      imageBlock.dataset.quarterTurn = isQuarterTurn(safeRotation) ? "true" : "false";
+      imageBlock.style.width = `${safeWidth}%`;
+      imageBlock.style.setProperty("--image-width", `${safeWidth}%`);
+      image.style.transform = `rotate(${safeRotation}deg)`;
+      if (safeWrap === "top-bottom") {
+        imageBlock.style.marginLeft = safeAlignment === "right" ? "auto" : safeAlignment === "center" ? "auto" : "0";
+        imageBlock.style.marginRight = safeAlignment === "left" ? "auto" : safeAlignment === "center" ? "auto" : "0";
+      } else {
+        imageBlock.style.marginLeft = "";
+        imageBlock.style.marginRight = "";
+      }
+      syncImageFrameSize(imageBlock);
+    }
+
+    function previewImageWidth(value) {
+      if (!selectedImageBlock) return;
+      const width = clampInteger(value, 10, 100) || 100;
+      const rotation = getImageRotation(selectedImageBlock);
+      applyImageTransform(selectedImageBlock, width, rotation);
+      document.getElementById("cfg-image-width-value").textContent = width;
+    }
+
+    function previewImageRotation(value) {
+      if (!selectedImageBlock) return;
+      const rotation = clampInteger(value, -180, 180) || 0;
+      const width = getImageWidthPercent(selectedImageBlock);
+      applyImageTransform(selectedImageBlock, width, rotation);
+      document.getElementById("cfg-image-rotation-value").textContent = rotation;
+    }
+
+    function setImageAlignment(alignment) {
+      if (!selectedImageBlock) return;
+      applyImageTransform(selectedImageBlock, getImageWidthPercent(selectedImageBlock), getImageRotation(selectedImageBlock), alignment);
+      showImageConfig();
+    }
+
+    function setImageWrap(wrap) {
+      if (!selectedImageBlock) return;
+      applyImageTransform(
+        selectedImageBlock,
+        getImageWidthPercent(selectedImageBlock),
+        getImageRotation(selectedImageBlock),
+        getImageAlignment(selectedImageBlock),
+        wrap
+      );
+      showImageConfig();
+    }
+
+    function rotateSelectedImage(delta) {
+      if (!selectedImageBlock) return;
+      const nextRotation = clampInteger(getImageRotation(selectedImageBlock) + delta, -180, 180) || 0;
+      const width = getImageWidthPercent(selectedImageBlock);
+      applyImageTransform(selectedImageBlock, width, nextRotation);
+      showImageConfig();
+    }
+
+    function saveImageConfig() {
+      if (!selectedImage || !selectedImageBlock) return;
+      selectedImage.alt = document.getElementById("cfg-image-alt").value;
+      applyImageTransform(
+        selectedImageBlock,
+        document.getElementById("cfg-image-width").value,
+        document.getElementById("cfg-image-rotation").value,
+        getImageAlignment(selectedImageBlock),
+        getImageWrap(selectedImageBlock)
+      );
+      showImageConfig();
+    }
+
+    function resetImageConfig() {
+      if (!selectedImageBlock) return;
+      applyImageTransform(selectedImageBlock, 70, 0, "center", "top-bottom");
+      showImageConfig();
+    }
+
+    function deleteSelectedImage() {
+      if (!selectedImageBlock) return;
+      selectedImageBlock.remove();
+      clearImageSelection(false);
+      clearSelection();
+      updateDropHint();
+    }
+
+    function toggleTablePicker() {
+      const shouldOpen = !tablePicker.classList.contains("open");
+      closeToolbarPopovers();
+      if (shouldOpen) tablePicker.classList.add("open");
+    }
+
+    function buildTablePicker() {
+      for (let row = 1; row <= 8; row++) {
+        for (let col = 1; col <= 10; col++) {
+          const cell = document.createElement("button");
+          cell.type = "button";
+          cell.className = "table-grid-cell";
+          cell.dataset.rows = row;
+          cell.dataset.cols = col;
+          cell.title = `${row} x ${col}`;
+          cell.addEventListener("mouseenter", () => previewTableSize(row, col));
+          cell.addEventListener("click", () => insertTable(row, col));
+          tableGrid.appendChild(cell);
+        }
+      }
+
+      tableGrid.addEventListener("mouseleave", () => previewTableSize(0, 0));
+    }
+
+    function previewTableSize(rows, cols) {
+      tablePickerRows = rows;
+      tablePickerCols = cols;
+      tableGrid.querySelectorAll(".table-grid-cell").forEach(cell => {
+        const cellRows = Number(cell.dataset.rows);
+        const cellCols = Number(cell.dataset.cols);
+        cell.classList.toggle("active", rows && cols && cellRows <= rows && cellCols <= cols);
+      });
+      tableSizeLabel.textContent = rows && cols ? `${rows} 行 x ${cols} 列` : "移动鼠标选择行列";
+    }
+
+    function insertCustomTable() {
+      const rows = clampInteger(prompt("请输入表格行数", "3"), 1, 20);
+      if (!rows) return;
+
+      const cols = clampInteger(prompt("请输入表格列数", "3"), 1, 10);
+      if (!cols) return;
+
+      insertTable(rows, cols);
+    }
+
+    function insertTable(rows = tablePickerRows, cols = tablePickerCols) {
+      rows = clampInteger(rows, 1, 20);
+      cols = clampInteger(cols, 1, 10);
+      if (!rows || !cols) return;
+
+      let html = '<table class="editor-table"><tbody>';
+      for (let row = 0; row < rows; row++) {
+        html += "<tr>";
+        for (let col = 0; col < cols; col++) {
+          html += row === 0 ? "<th>表头</th>" : "<td>内容</td>";
+        }
+        html += "</tr>";
+      }
+      html += "</tbody></table>";
+
+      insertHtmlAtCursor(html);
+      closeToolbarPopovers();
+      previewTableSize(0, 0);
+    }
+
+    function selectTableCell(cell) {
+      clearTableSelection();
+      selectedTableCell = cell;
+      selectedTableCell.classList.add("selected-cell");
+      tableTools.classList.add("active");
+    }
+
+    function clearTableSelection() {
+      if (selectedTableCell) selectedTableCell.classList.remove("selected-cell");
+      selectedTableCell = null;
+      tableTools.classList.remove("active");
+    }
+
+    function updateTableToolsFromSelection() {
+      const selection = window.getSelection();
+      if (!selection.rangeCount) return;
+
+      const node = selection.anchorNode;
+      const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+      const cell = element?.closest("td, th");
+
+      if (cell && editor.contains(cell)) {
+        selectTableCell(cell);
+      }
+    }
+
+    function getSelectedTableParts() {
+      if (!selectedTableCell || !editor.contains(selectedTableCell)) return null;
+      const row = selectedTableCell.closest("tr");
+      const table = selectedTableCell.closest("table");
+      const rows = [...table.rows];
+      const rowIndex = rows.indexOf(row);
+      const cellIndex = [...row.cells].indexOf(selectedTableCell);
+      return { table, row, rows, rowIndex, cellIndex };
+    }
+
+    function insertTableRow(position) {
+      const parts = getSelectedTableParts();
+      if (!parts) return;
+
+      const referenceIndex = position === "above" ? parts.rowIndex : parts.rowIndex + 1;
+      const newRow = parts.table.insertRow(referenceIndex);
+      const columnCount = parts.rows[0]?.cells.length || 1;
+      for (let i = 0; i < columnCount; i++) {
+        newRow.insertCell(i).textContent = "内容";
+      }
+      selectTableCell(newRow.cells[Math.min(parts.cellIndex, newRow.cells.length - 1)]);
+    }
+
+    function insertTableColumn(position) {
+      const parts = getSelectedTableParts();
+      if (!parts) return;
+
+      const insertIndex = position === "left" ? parts.cellIndex : parts.cellIndex + 1;
+      parts.rows.forEach((row, rowIndex) => {
+        const cell = rowIndex === 0 ? document.createElement("th") : document.createElement("td");
+        cell.textContent = rowIndex === 0 ? "表头" : "内容";
+        row.insertBefore(cell, row.cells[insertIndex] || null);
+      });
+      selectTableCell(parts.row.cells[insertIndex]);
+    }
+
+    function deleteTableRow() {
+      const parts = getSelectedTableParts();
+      if (!parts) return;
+
+      if (parts.rows.length === 1) {
+        deleteTable();
+        return;
+      }
+
+      const nextRow = parts.rows[parts.rowIndex + 1] || parts.rows[parts.rowIndex - 1];
+      parts.row.remove();
+      selectTableCell(nextRow.cells[Math.min(parts.cellIndex, nextRow.cells.length - 1)]);
+    }
+
+    function deleteTableColumn() {
+      const parts = getSelectedTableParts();
+      if (!parts) return;
+
+      const columnCount = parts.rows[0]?.cells.length || 0;
+      if (columnCount <= 1) {
+        deleteTable();
+        return;
+      }
+
+      parts.rows.forEach(row => {
+        if (row.cells[parts.cellIndex]) row.cells[parts.cellIndex].remove();
+      });
+
+      const nextIndex = Math.min(parts.cellIndex, columnCount - 2);
+      selectTableCell(parts.row.cells[nextIndex]);
+    }
+
+    function deleteTable() {
+      const parts = getSelectedTableParts();
+      if (!parts) return;
+
+      parts.table.remove();
+      clearTableSelection();
+      updateDropHint();
+    }
+
+    function closeToolbarPopovers() {
+      imageMenu.classList.remove("open");
+      tablePicker.classList.remove("open");
+    }
+
+    function updateDropHint() {
+      const hint = editor.querySelector(".drop-hint");
+      if (isEditorEmpty()) {
+        if (!hint) {
+          editor.innerHTML = `<div class="drop-hint" contenteditable="false">${dropHintText}</div>`;
+        }
+      } else if (hint) {
+        hint.remove();
+      }
+    }
+
+    function removeDropHint() {
+      editor.querySelectorAll(".drop-hint").forEach(node => node.remove());
+    }
+
+    function isEditorEmpty() {
+      const clone = editor.cloneNode(true);
+      clone.querySelectorAll(".drop-hint").forEach(node => node.remove());
+      clone.querySelectorAll("br").forEach(node => node.remove());
+      const hasMediaOrComponents = clone.querySelector(".component-block, img, table, canvas, iframe, video, audio, hr");
+      return !hasMediaOrComponents && clone.textContent.trim() === "";
+    }
+
+    function clampInteger(value, min, max) {
+      if (value === null) return null;
+      const number = Number.parseInt(value, 10);
+      if (!Number.isFinite(number)) return null;
+      return Math.min(max, Math.max(min, number));
+    }
+
+    function exportFullHtml() {
+      const clone = editor.cloneNode(true);
+
+      clone.querySelectorAll(".drop-hint").forEach(node => node.remove());
+      clone.querySelectorAll(".selected-cell").forEach(node => node.classList.remove("selected-cell"));
+      clone.querySelectorAll(".image-block.selected").forEach(node => node.classList.remove("selected"));
+
+      clone.querySelectorAll(".component-block").forEach(block => {
+        const id = block.dataset.componentId;
+        const data = componentData[id];
+        if (!data) {
+          block.remove();
+          return;
+        }
+
+        const html = componentRegistry[data.type].renderExport(data.config, id);
+        const temp = document.createElement("div");
+        temp.innerHTML = html;
+        block.replaceWith(...temp.childNodes);
+      });
+
+      const finalBody = clone.innerHTML;
+
+      return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>教学交互页面</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      line-height: 1.8;
+      max-width: 960px;
+      margin: 40px auto;
+      padding: 0 24px;
+      color: #111827;
+      background: #ffffff;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.35;
+    }
+
+    .image-block {
+      display: block;
+      width: var(--image-width, 70%);
+      max-width: 100%;
+      margin: 24px auto;
+      line-height: 0;
+      clear: both;
+      position: relative;
+    }
+
+    .image-block[data-align="left"] {
+      margin-left: 0;
+      margin-right: auto;
+    }
+
+    .image-block[data-align="center"] {
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .image-block[data-align="right"] {
+      margin-left: auto;
+      margin-right: 0;
+    }
+
+    .image-block[data-wrap="inline"] {
+      display: inline-block;
+      margin: 0 8px;
+      clear: none;
+      vertical-align: middle;
+    }
+
+    .image-block[data-wrap="square-left"] {
+      float: left;
+      clear: none;
+      margin: 8px 18px 12px 0;
+    }
+
+    .image-block[data-wrap="square-right"] {
+      float: right;
+      clear: none;
+      margin: 8px 0 12px 18px;
+    }
+
+    .image-frame {
+      position: relative;
+      display: block;
+      width: 100%;
+      aspect-ratio: var(--image-aspect, 1.3333);
+      line-height: 0;
+    }
+
+    .image-block[data-quarter-turn="true"] .image-frame {
+      aspect-ratio: var(--image-inverse-aspect, 0.75);
+    }
+
+    .editor-image {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      display: block;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      border-radius: 10px;
+      object-fit: cover;
+      translate: -50% -50%;
+      transform-origin: center center;
+    }
+
+    .image-block[data-quarter-turn="true"] .editor-image {
+      width: calc(100% * var(--image-aspect, 1.3333));
+      height: calc(100% * var(--image-inverse-aspect, 0.75));
+    }
+
+    .editor-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+
+    .editor-table th,
+    .editor-table td {
+      border: 1px solid #d1d5db;
+      padding: 8px 10px;
+      vertical-align: top;
+    }
+
+    .editor-table th {
+      background: #f3f4f6;
+      font-weight: 700;
+    }
+
+    .interactive-card {
+      border: 1px solid #d1d5db;
+      border-radius: 14px;
+      padding: 18px;
+      margin: 22px 0;
+      background: #f9fafb;
+    }
+
+    .info-card {
+      background: #eff6ff;
+      border-color: #93c5fd;
+    }
+
+    .plot-canvas {
+      width: 100%;
+      max-width: 680px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      display: block;
+    }
+
+    .plot-expression {
+      color: #374151;
+      font-size: 14px;
+    }
+
+    .option-line {
+      display: block;
+      margin: 8px 0;
+      cursor: pointer;
+    }
+
+    .fill-input {
+      display: block;
+      width: min(420px, 100%);
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 15px;
+      margin: 10px 0;
+    }
+
+    .submit-btn {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      background: #2563eb;
+      color: #ffffff;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .submit-btn:hover {
+      background: #1d4ed8;
+    }
+
+    .feedback {
+      font-weight: 700;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+${finalBody}
+
+<script>
+  function checkChoice(id) {
+    const card = document.getElementById(id);
+    const selected = card.querySelector("input[type='radio']:checked");
+    const feedback = card.querySelector(".feedback");
+    const answer = card.dataset.answer;
+
+    if (!selected) {
+      feedback.textContent = "请先选择一个答案。";
+      return;
+    }
+
+    feedback.textContent = selected.value === answer ? card.dataset.correct : card.dataset.wrong;
+  }
+
+  function checkFillBlank(id) {
+    const card = document.getElementById(id);
+    const input = card.querySelector(".fill-input");
+    const feedback = card.querySelector(".feedback");
+    const answer = String(card.dataset.answer).trim();
+    const value = String(input.value).trim();
+
+    feedback.textContent = value === answer ? card.dataset.correct : card.dataset.wrong;
+  }
+
+  function drawFunctionPlots() {
+    document.querySelectorAll(".plot-canvas").forEach(canvas => {
+      const ctx = canvas.getContext("2d");
+      const expression = canvas.dataset.expression || "x";
+      const xMin = Number(canvas.dataset.xMin);
+      const xMax = Number(canvas.dataset.xMax);
+      const yMin = Number(canvas.dataset.yMin);
+      const yMax = Number(canvas.dataset.yMax);
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+
+      function mapX(x) {
+        return (x - xMin) / (xMax - xMin) * w;
+      }
+
+      function mapY(y) {
+        return h - (y - yMin) / (yMax - yMin) * h;
+      }
+
+      ctx.strokeStyle = "#e5e7eb";
+      ctx.lineWidth = 1;
+
+      for (let i = 0; i <= 10; i++) {
+        const x = xMin + (xMax - xMin) * i / 10;
+        const px = mapX(x);
+        ctx.beginPath();
+        ctx.moveTo(px, 0);
+        ctx.lineTo(px, h);
+        ctx.stroke();
+
+        const y = yMin + (yMax - yMin) * i / 10;
+        const py = mapY(y);
+        ctx.beginPath();
+        ctx.moveTo(0, py);
+        ctx.lineTo(w, py);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = "#6b7280";
+      ctx.lineWidth = 1.5;
+
+      if (xMin <= 0 && xMax >= 0) {
+        const x0 = mapX(0);
+        ctx.beginPath();
+        ctx.moveTo(x0, 0);
+        ctx.lineTo(x0, h);
+        ctx.stroke();
+      }
+
+      if (yMin <= 0 && yMax >= 0) {
+        const y0 = mapY(0);
+        ctx.beginPath();
+        ctx.moveTo(0, y0);
+        ctx.lineTo(w, y0);
+        ctx.stroke();
+      }
+
+      let fn;
+      try {
+        fn = new Function("x", "with (Math) { return " + expression + "; }");
+      } catch (err) {
+        drawError(ctx, "表达式错误：" + err.message);
+        return;
+      }
+
+      ctx.strokeStyle = "#2563eb";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+
+      let started = false;
+
+      for (let i = 0; i <= w; i++) {
+        const x = xMin + (xMax - xMin) * i / w;
+        let y;
+
+        try {
+          y = fn(x);
+        } catch (err) {
+          drawError(ctx, "计算错误：" + err.message);
+          return;
+        }
+
+        if (!Number.isFinite(y)) {
+          started = false;
+          continue;
+        }
+
+        const px = mapX(x);
+        const py = mapY(y);
+
+        if (py < -10000 || py > h + 10000) {
+          started = false;
+          continue;
+        }
+
+        if (!started) {
+          ctx.moveTo(px, py);
+          started = true;
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+
+      ctx.stroke();
+
+      ctx.fillStyle = "#374151";
+      ctx.font = "13px system-ui, sans-serif";
+      ctx.fillText("x: [" + xMin + ", " + xMax + "]", 12, h - 30);
+      ctx.fillText("y: [" + yMin + ", " + yMax + "]", 12, h - 12);
+    });
+  }
+
+  function drawError(ctx, message) {
+    ctx.fillStyle = "#ef4444";
+    ctx.font = "16px system-ui, sans-serif";
+    ctx.fillText(message, 20, 40);
+  }
+
+  window.addEventListener("load", drawFunctionPlots);
+<\/script>
+</body>
+</html>`;
+    }
+
+    function previewHtml() {
+      const html = exportFullHtml();
+      openModal("预览");
+      const iframe = document.createElement("iframe");
+      document.getElementById("modal-body").innerHTML = "";
+      document.getElementById("modal-body").appendChild(iframe);
+      iframe.contentDocument.open();
+      iframe.contentDocument.write(html);
+      iframe.contentDocument.close();
+    }
+
+    function showSourceHtml() {
+      const html = exportFullHtml();
+      openModal("导出源码");
+      const textarea = document.createElement("textarea");
+      textarea.className = "code-output";
+      textarea.value = html;
+      document.getElementById("modal-body").innerHTML = "";
+      document.getElementById("modal-body").appendChild(textarea);
+    }
+
+    function downloadHtml() {
+      const html = exportFullHtml();
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "teaching-interactive-page.html";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function openModal(title) {
+      document.getElementById("modal-title").textContent = title;
+      document.getElementById("modal-mask").style.display = "flex";
+    }
+
+    function closeModal() {
+      document.getElementById("modal-mask").style.display = "none";
+      document.getElementById("modal-body").innerHTML = "";
+    }
+
+    function deepClone(obj) {
+      return JSON.parse(JSON.stringify(obj));
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+
+    updateDropHint();
+  </script>
+</body>
+</html>
