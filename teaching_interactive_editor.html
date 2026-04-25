@@ -132,6 +132,68 @@
       line-height: 1.5;
     }
 
+    .ai-panel {
+      display: grid;
+      gap: 10px;
+    }
+
+    .ai-generate-btn {
+      width: 100%;
+      background: #111827;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .ai-generate-btn:hover {
+      background: #1f2937;
+    }
+
+    .ai-settings {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #f9fafb;
+    }
+
+    .ai-settings summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      color: #374151;
+    }
+
+    .ai-settings label {
+      margin: 8px 0 4px;
+      font-size: 12px;
+    }
+
+    .ai-settings input,
+    .ai-settings textarea {
+      font-size: 12px;
+      padding: 7px 8px;
+    }
+
+    .ai-settings textarea {
+      min-height: 64px;
+    }
+
+    .ai-status {
+      min-height: 18px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #6b7280;
+    }
+
+    .ai-status.error {
+      color: #dc2626;
+    }
+
+    .ai-status.success {
+      color: #047857;
+    }
+
     .editor-wrap {
       min-width: 0;
       min-height: 0;
@@ -669,6 +731,30 @@
           <div class="component-item" draggable="true" data-type="info-card">
             <div class="component-name">知识卡片</div>
             <div class="component-desc">插入重点知识、提示或拓展链接。</div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="ai-panel">
+            <button id="ai-generate-btn" class="ai-generate-btn" onclick="generateAiComponent()">AI 生成组件</button>
+
+            <details class="ai-settings" open>
+              <summary>大模型设置</summary>
+
+              <label for="ai-api-url">接口 URL</label>
+              <input id="ai-api-url" value="https://api.scnet.cn/api/llm/v1/chat/completions">
+
+              <label for="ai-api-key">API Key</label>
+              <input id="ai-api-key" type="password" placeholder="请输入 API Key">
+
+              <label for="ai-model">模型</label>
+              <input id="ai-model" value="minimax2.5">
+
+              <label for="ai-prompt">生成要求</label>
+              <textarea id="ai-prompt" placeholder="例如：根据当前教学内容生成一道选择题"></textarea>
+
+              <div id="ai-status" class="ai-status"></div>
+            </details>
           </div>
         </div>
       </aside>
@@ -1814,6 +1900,169 @@
       insertHtmlAtCursor(html);
       closeToolbarPopovers();
       previewTableSize(0, 0);
+    }
+
+    async function generateAiComponent() {
+      const apiUrl = document.getElementById("ai-api-url").value.trim();
+      const apiKey = document.getElementById("ai-api-key").value.trim();
+      const model = document.getElementById("ai-model").value.trim() || "minimax2.5";
+      const userPrompt = document.getElementById("ai-prompt").value.trim();
+      const button = document.getElementById("ai-generate-btn");
+
+      if (!apiUrl) {
+        setAiStatus("请先填写接口 URL。", "error");
+        return;
+      }
+
+      if (!apiKey) {
+        setAiStatus("请先填写 API Key。", "error");
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = "生成中...";
+      setAiStatus("正在根据当前教学内容生成组件。", "");
+
+      try {
+        const response = await fetch(normalizeChatCompletionsUrl(apiUrl), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.4,
+            messages: [
+              {
+                role: "system",
+                content: [
+                  "你是教学交互组件生成器。",
+                  "只能返回 JSON，不要返回 Markdown。",
+                  "JSON 格式：{\"components\":[{\"type\":\"choice-question|fill-blank|info-card|function-plot\",\"config\":{...}}]}。",
+                  "最多返回 3 个组件。",
+                  "choice-question config 字段：question, options(数组), answer, correctFeedback, wrongFeedback。",
+                  "fill-blank config 字段：question, answer, placeholder, correctFeedback, wrongFeedback。",
+                  "info-card config 字段：title, content。",
+                  "function-plot config 字段：title, expression, xMin, xMax, yMin, yMax。",
+                  "内容必须适合当前教学页面。"
+                ].join("\\n")
+              },
+              {
+                role: "user",
+                content: [
+                  userPrompt || "请根据当前教学内容生成一个最合适的交互组件。",
+                  "",
+                  "当前教学内容：",
+                  getEditorPlainText()
+                ].join("\\n")
+              }
+            ]
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`接口返回 ${response.status}：${errorText.slice(0, 180)}`);
+        }
+
+        const result = await response.json();
+        const content = result?.choices?.[0]?.message?.content || result?.choices?.[0]?.text || "";
+        const generated = normalizeAiGeneratedComponents(parseAiJson(content));
+
+        if (!generated.length) {
+          throw new Error("模型没有返回可用组件。");
+        }
+
+        generated.forEach(({ type, config }) => insertGeneratedComponent(type, config));
+        setAiStatus(`已插入 ${generated.length} 个组件。`, "success");
+      } catch (error) {
+        setAiStatus(`生成失败：${error.message}`, "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "AI 生成组件";
+      }
+    }
+
+    function normalizeChatCompletionsUrl(url) {
+      const trimmed = url.replace(/\/+$/, "");
+      return trimmed.endsWith("/chat/completions") ? trimmed : `${trimmed}/chat/completions`;
+    }
+
+    function setAiStatus(message, type) {
+      const status = document.getElementById("ai-status");
+      status.textContent = message;
+      status.className = `ai-status ${type || ""}`.trim();
+    }
+
+    function getEditorPlainText() {
+      const clone = editor.cloneNode(true);
+      clone.querySelectorAll(".drop-hint").forEach(node => node.remove());
+      clone.querySelectorAll(".component-block").forEach(block => {
+        const type = block.dataset.componentType;
+        const id = block.dataset.componentId;
+        const data = componentData[id];
+        block.textContent = data ? `${componentRegistry[type].name}：${JSON.stringify(data.config)}` : "";
+      });
+      return clone.innerText.trim().slice(0, 4000);
+    }
+
+    function parseAiJson(content) {
+      const cleaned = String(content)
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+
+      try {
+        return JSON.parse(cleaned);
+      } catch (error) {
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (!match) throw error;
+        return JSON.parse(match[0]);
+      }
+    }
+
+    function normalizeAiGeneratedComponents(payload) {
+      const rawComponents = Array.isArray(payload) ? payload : payload?.components;
+      if (!Array.isArray(rawComponents)) return [];
+
+      return rawComponents
+        .map(item => {
+          const type = item?.type;
+          if (!componentRegistry[type]) return null;
+          return {
+            type,
+            config: sanitizeGeneratedConfig(type, item.config || {})
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 3);
+    }
+
+    function sanitizeGeneratedConfig(type, config) {
+      const defaults = deepClone(componentRegistry[type].defaultConfig);
+      const merged = { ...defaults, ...config };
+
+      if (type === "choice-question") {
+        merged.options = Array.isArray(merged.options) ? merged.options.map(String).filter(Boolean).slice(0, 6) : defaults.options;
+        if (!merged.options.includes(String(merged.answer))) merged.answer = merged.options[0] || defaults.answer;
+      }
+
+      if (type === "function-plot") {
+        merged.xMin = Number.isFinite(Number(merged.xMin)) ? Number(merged.xMin) : defaults.xMin;
+        merged.xMax = Number.isFinite(Number(merged.xMax)) ? Number(merged.xMax) : defaults.xMax;
+        merged.yMin = Number.isFinite(Number(merged.yMin)) ? Number(merged.yMin) : defaults.yMin;
+        merged.yMax = Number.isFinite(Number(merged.yMax)) ? Number(merged.yMax) : defaults.yMax;
+      }
+
+      return merged;
+    }
+
+    function insertGeneratedComponent(type, config) {
+      const id = "comp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      componentData[id] = { id, type, config };
+      insertHtmlAtCursor(componentRegistry[type].renderEditor(config, id));
+      selectComponent(id);
     }
 
     function selectTableCell(cell) {
