@@ -2473,15 +2473,21 @@ ${componentHtml}
 
       button.disabled = true;
       button.textContent = "生成中";
-      setAiStatus("正在生成可拖拽组件模板。", "");
+      setAiStatus("正在生成可拖拽组件模板，MiniMax 可能需要几十秒。", "");
 
+      let timeoutId = null;
       try {
         const request = buildAiRequest(apiUrl, apiKey, model, userPrompt);
+        const controller = new AbortController();
+        timeoutId = window.setTimeout(() => controller.abort(), 90000);
         const response = await fetch(request.url, {
           method: "POST",
           headers: request.headers,
-          body: JSON.stringify(request.body)
+          body: JSON.stringify(request.body),
+          signal: controller.signal
         });
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -2508,10 +2514,14 @@ ${componentHtml}
         renderAiChat();
         setAiStatus(`已生成 ${generated.length} 个组件模板。`, "success");
       } catch (error) {
-        aiChatMessages.push({ role: "assistant", content: `生成失败：${error.message}` });
+        const message = error.name === "AbortError"
+          ? "生成超时。MiniMax 当前响应较慢，请稍后重试，或把生成要求写得更聚焦。"
+          : error.message;
+        aiChatMessages.push({ role: "assistant", content: `生成失败：${message}` });
         renderAiChat();
-        setAiStatus(`生成失败：${error.message}`, "error");
+        setAiStatus(`生成失败：${message}`, "error");
       } finally {
+        if (timeoutId) window.clearTimeout(timeoutId);
         button.disabled = false;
         button.textContent = "发送生成";
       }
