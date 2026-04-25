@@ -221,7 +221,7 @@
     }
 
     .ai-builder {
-      width: min(1180px, 94vw);
+      width: min(1380px, 96vw);
       height: min(780px, 90vh);
       display: grid;
       grid-template-rows: 56px 1fr;
@@ -249,7 +249,7 @@
     .ai-builder-body {
       min-height: 0;
       display: grid;
-      grid-template-columns: 280px minmax(360px, 1fr) 340px;
+      grid-template-columns: 250px minmax(320px, 0.9fr) minmax(440px, 1.1fr);
       background: #f3f4f6;
     }
 
@@ -377,7 +377,7 @@
     .ai-live-preview iframe {
       display: block;
       width: 100%;
-      height: 260px;
+      height: 360px;
       border: 0;
       background: #ffffff;
     }
@@ -896,6 +896,23 @@
         display: none;
       }
     }
+
+    @media (max-width: 1100px) {
+      .ai-builder {
+        height: min(820px, 92vh);
+      }
+
+      .ai-builder-body {
+        grid-template-columns: 220px minmax(0, 1fr);
+        grid-template-rows: minmax(280px, 1fr) minmax(360px, 1fr);
+      }
+
+      .ai-preview-panel {
+        grid-column: 1 / -1;
+        border-left: 0;
+        border-top: 1px solid #e5e7eb;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1083,7 +1100,7 @@
           <div class="help-text">本地 Chrome 测试默认通过本机代理转发到 SCNet，避免 file:// 跨域失败。</div>
 
           <label for="ai-api-key">API Key</label>
-          <input id="ai-api-key" type="password" placeholder="请输入 API Key">
+          <input id="ai-api-key" type="password" value="sk-NTM3LTExNDM5MDM2Njk3LTE3NzM2MzU5NjM4Njc=" placeholder="请输入 API Key">
 
           <label for="ai-model">模型</label>
           <input id="ai-model" value="MiniMax-M2.5">
@@ -2522,13 +2539,16 @@ ${componentHtml}
         "custom-interactive defaultConfig 字段：title, summary, html, css, js。",
         "custom-interactive 的 html 只写组件内部结构，不要写 script/style/html/body；css 尽量作用在组件内部 class 上；js 是函数体，会以 root 参数执行。",
         "custom-interactive 的 js 必须使用 root.querySelector/root.querySelectorAll 查找元素，不要使用 document.querySelector；可以使用 document.createElement；不要请求网络；不要使用 alert；所有交互应在组件内即时反馈。",
+        "custom-interactive 必须是紧凑的正文内教学组件，不是整页网页；不要使用 body/html 样式、fixed/absolute 页面定位、超大留白或超过 420px 的固定高度。",
         "custom-interactive 必须能直接运行，有完整默认状态，有清晰按钮、输入、结果区域、状态反馈和必要的重置/清空按钮。",
+        "核心交互必须使用 button、input、select、textarea 等语义控件；不要只让装饰性的 div 承担点击操作；按钮文字要清晰。",
         "如果组件涉及随机、范围、数量、题目数量、时间、阈值或分类，应提供可编辑输入控件，并做输入校验和错误提示。",
         "如果组件包含历史记录或列表，最多显示最近 10 条，并提供清空按钮，避免无限增长。",
         "组件初始状态不得预先显示随机结果；必须等待用户操作后才显示结果。",
-        "CSS 必须让组件在 320px 到 700px 宽度内不横向滚动，控件文字不重叠；按钮和输入应有清晰 hover/focus 状态。",
+        "CSS 必须让组件在 320px 到 700px 宽度内不横向滚动，控件文字不重叠；所有容器 max-width:100%，避免固定宽度超过父容器；按钮和输入应有清晰 hover/focus 状态。",
+        "组件拖入正文后应和前后段落贴合，外层留白控制在 12-18px，不能生成会把正文撑开的大画布或整屏容器。",
         "class 名尽量使用组件相关前缀，避免影响页面其他内容。",
-        "比如抽小球组件应包含最大编号输入、抽取容器/按钮、当前结果、最近历史、清空历史和非法输入提示。",
+        "比如抽小球组件应包含最大编号输入、明确的抽取按钮、当前结果、最近历史、清空历史和非法输入提示；历史最多保留 10 条。",
         "baseType 决定这个自定义组件复用哪一种组件能力。",
         "choice-question defaultConfig 字段：question, options(数组), answer, correctFeedback, wrongFeedback。",
         "fill-blank defaultConfig 字段：question, answer, placeholder, correctFeedback, wrongFeedback。",
