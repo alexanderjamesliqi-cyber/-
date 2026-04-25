@@ -742,13 +742,13 @@
               <summary>大模型设置</summary>
 
               <label for="ai-api-url">接口 URL</label>
-              <input id="ai-api-url" value="https://api.scnet.cn/api/llm/v1/chat/completions">
+              <input id="ai-api-url" value="https://api.scnet.cn/api/llm/anthropic/v1/messages">
 
               <label for="ai-api-key">API Key</label>
               <input id="ai-api-key" type="password" placeholder="请输入 API Key">
 
               <label for="ai-model">模型</label>
-              <input id="ai-model" value="minimax2.5">
+              <input id="ai-model" value="MiniMax-M2.5">
 
               <label for="ai-prompt">生成要求</label>
               <textarea id="ai-prompt" placeholder="例如：根据当前教学内容生成一道选择题"></textarea>
@@ -1905,7 +1905,7 @@
     async function generateAiComponent() {
       const apiUrl = document.getElementById("ai-api-url").value.trim();
       const apiKey = document.getElementById("ai-api-key").value.trim();
-      const model = document.getElementById("ai-model").value.trim() || "minimax2.5";
+      const model = normalizeModelName(document.getElementById("ai-model").value.trim() || "MiniMax-M2.5");
       const userPrompt = document.getElementById("ai-prompt").value.trim();
       const button = document.getElementById("ai-generate-btn");
 
@@ -1924,50 +1924,23 @@
       setAiStatus("正在根据当前教学内容生成组件。", "");
 
       try {
-        const response = await fetch(normalizeChatCompletionsUrl(apiUrl), {
+        const request = buildAiRequest(apiUrl, apiKey, model, userPrompt);
+        const response = await fetch(request.url, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0.4,
-            messages: [
-              {
-                role: "system",
-                content: [
-                  "你是教学交互组件生成器。",
-                  "只能返回 JSON，不要返回 Markdown。",
-                  "JSON 格式：{\"components\":[{\"type\":\"choice-question|fill-blank|info-card|function-plot\",\"config\":{...}}]}。",
-                  "最多返回 3 个组件。",
-                  "choice-question config 字段：question, options(数组), answer, correctFeedback, wrongFeedback。",
-                  "fill-blank config 字段：question, answer, placeholder, correctFeedback, wrongFeedback。",
-                  "info-card config 字段：title, content。",
-                  "function-plot config 字段：title, expression, xMin, xMax, yMin, yMax。",
-                  "内容必须适合当前教学页面。"
-                ].join("\\n")
-              },
-              {
-                role: "user",
-                content: [
-                  userPrompt || "请根据当前教学内容生成一个最合适的交互组件。",
-                  "",
-                  "当前教学内容：",
-                  getEditorPlainText()
-                ].join("\\n")
-              }
-            ]
-          })
+          headers: request.headers,
+          body: JSON.stringify(request.body)
         });
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`接口返回 ${response.status}：${errorText.slice(0, 180)}`);
+          const modelHint = response.status === 422 && errorText.includes("Model Not Exist")
+            ? "。请确认模型名；SCNet MiniMax 默认应使用 MiniMax-M2.5 和 Anthropic messages 接口。"
+            : "";
+          throw new Error(`接口返回 ${response.status}：${errorText.slice(0, 180)}${modelHint}`);
         }
 
         const result = await response.json();
-        const content = result?.choices?.[0]?.message?.content || result?.choices?.[0]?.text || "";
+        const content = extractAiContent(result);
         const generated = normalizeAiGeneratedComponents(parseAiJson(content));
 
         if (!generated.length) {
@@ -1984,9 +1957,101 @@
       }
     }
 
+    function normalizeModelName(model) {
+      const normalized = String(model).trim();
+      if (/^minimax[-_\s]?m?2\.5$/i.test(normalized) || /^minimax2\.5$/i.test(normalized)) {
+        return "MiniMax-M2.5";
+      }
+      return normalized;
+    }
+
+    function getAiSystemPrompt() {
+      return [
+        "你是教学交互组件生成器。",
+        "只能返回 JSON，不要返回 Markdown。",
+        "JSON 格式：{\"components\":[{\"type\":\"choice-question|fill-blank|info-card|function-plot\",\"config\":{...}}]}。",
+        "最多返回 3 个组件。",
+        "choice-question config 字段：question, options(数组), answer, correctFeedback, wrongFeedback。",
+        "fill-blank config 字段：question, answer, placeholder, correctFeedback, wrongFeedback。",
+        "info-card config 字段：title, content。",
+        "function-plot config 字段：title, expression, xMin, xMax, yMin, yMax。",
+        "内容必须适合当前教学页面。"
+      ].join("\\n");
+    }
+
+    function getAiUserPrompt(userPrompt) {
+      return [
+        userPrompt || "请根据当前教学内容生成一个最合适的交互组件。",
+        "",
+        "当前教学内容：",
+        getEditorPlainText()
+      ].join("\\n");
+    }
+
+    function buildAiRequest(apiUrl, apiKey, model, userPrompt) {
+      const useAnthropic = /anthropic|\/messages\/?$/i.test(apiUrl) || model === "MiniMax-M2.5";
+      const url = useAnthropic ? normalizeAnthropicMessagesUrl(apiUrl) : normalizeChatCompletionsUrl(apiUrl);
+      const headers = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      };
+
+      if (useAnthropic) {
+        return {
+          url,
+          headers,
+          body: {
+            model,
+            max_tokens: 2048,
+            temperature: 0.4,
+            system: getAiSystemPrompt(),
+            messages: [
+              { role: "user", content: getAiUserPrompt(userPrompt) }
+            ]
+          }
+        };
+      }
+
+      return {
+        url,
+        headers,
+        body: {
+          model,
+          temperature: 0.4,
+          messages: [
+            { role: "system", content: getAiSystemPrompt() },
+            { role: "user", content: getAiUserPrompt(userPrompt) }
+          ]
+        }
+      };
+    }
+
+    function normalizeAnthropicMessagesUrl(url) {
+      const trimmed = url.replace(/\/+$/, "");
+      if (trimmed.endsWith("/messages")) return trimmed;
+      if (trimmed.includes("/anthropic/")) return `${trimmed}/messages`;
+      if (trimmed.includes("api.scnet.cn")) return "https://api.scnet.cn/api/llm/anthropic/v1/messages";
+      return trimmed;
+    }
+
     function normalizeChatCompletionsUrl(url) {
       const trimmed = url.replace(/\/+$/, "");
       return trimmed.endsWith("/chat/completions") ? trimmed : `${trimmed}/chat/completions`;
+    }
+
+    function extractAiContent(result) {
+      const openAiContent = result?.choices?.[0]?.message?.content || result?.choices?.[0]?.text;
+      if (openAiContent) return openAiContent;
+
+      const anthropicContent = result?.content;
+      if (Array.isArray(anthropicContent)) {
+        return anthropicContent
+          .map(part => typeof part === "string" ? part : part?.text || "")
+          .join("\\n")
+          .trim();
+      }
+
+      return typeof anthropicContent === "string" ? anthropicContent : "";
     }
 
     function setAiStatus(message, type) {
