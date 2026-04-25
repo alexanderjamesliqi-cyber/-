@@ -132,6 +132,17 @@
       line-height: 1.5;
     }
 
+    .component-item.ai-component {
+      border-color: #a5b4fc;
+      background: #eef2ff;
+    }
+
+    .component-item.ai-component .component-name::before {
+      content: "AI ";
+      color: #4f46e5;
+      font-weight: 800;
+    }
+
     .ai-panel {
       display: grid;
       gap: 10px;
@@ -192,6 +203,194 @@
 
     .ai-status.success {
       color: #047857;
+    }
+
+    .ai-builder-mask {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      background: rgba(17, 24, 39, 0.64);
+      z-index: 120;
+    }
+
+    .ai-builder-mask.open {
+      display: flex;
+    }
+
+    .ai-builder {
+      width: min(1180px, 94vw);
+      height: min(780px, 90vh);
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      background: #ffffff;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.34);
+    }
+
+    .ai-builder-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 16px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #111827;
+      color: #ffffff;
+    }
+
+    .ai-builder-title {
+      font-weight: 800;
+    }
+
+    .ai-builder-body {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 280px minmax(360px, 1fr) 340px;
+      background: #f3f4f6;
+    }
+
+    .ai-builder-settings,
+    .ai-chat-panel,
+    .ai-preview-panel {
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .ai-builder-settings,
+    .ai-preview-panel {
+      background: #ffffff;
+    }
+
+    .ai-builder-settings {
+      border-right: 1px solid #e5e7eb;
+    }
+
+    .ai-preview-panel {
+      border-left: 1px solid #e5e7eb;
+    }
+
+    .ai-builder-settings label {
+      margin: 12px 0 6px;
+      font-size: 12px;
+    }
+
+    .ai-chat-panel {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 12px;
+    }
+
+    .ai-chat-log {
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-right: 4px;
+    }
+
+    .ai-message {
+      max-width: 86%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .ai-message.user {
+      align-self: flex-end;
+      background: #2563eb;
+      color: #ffffff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .ai-message.assistant {
+      align-self: flex-start;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      color: #111827;
+      border-bottom-left-radius: 4px;
+    }
+
+    .ai-chat-input-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .ai-chat-input-row textarea {
+      min-height: 82px;
+      resize: vertical;
+    }
+
+    .ai-preview-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .ai-preview-card {
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 12px;
+      background: #f9fafb;
+    }
+
+    .ai-preview-card-title {
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .ai-preview-meta {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 8px;
+    }
+
+    .ai-preview-config {
+      max-height: 120px;
+      overflow: auto;
+      padding: 8px;
+      border-radius: 8px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .ai-live-preview {
+      margin: 10px 0;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+
+    .ai-live-preview iframe {
+      display: block;
+      width: 100%;
+      height: 260px;
+      border: 0;
+      background: #ffffff;
+    }
+
+    .ai-preview-code-toggle {
+      margin-top: 8px;
+    }
+
+    .custom-code-field {
+      min-height: 120px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
     }
 
     .editor-wrap {
@@ -712,7 +911,7 @@
 
     <main class="main">
       <aside class="sidebar">
-        <div class="panel-section">
+        <div class="panel-section" id="component-list">
           <div class="component-item" draggable="true" data-type="function-plot">
             <div class="component-name">函数绘图仪</div>
             <div class="component-desc">绘制 y=f(x) 的函数图像，适合数学教学。</div>
@@ -736,25 +935,7 @@
 
         <div class="panel-section">
           <div class="ai-panel">
-            <button id="ai-generate-btn" class="ai-generate-btn" onclick="generateAiComponent()">AI 生成组件</button>
-
-            <details class="ai-settings" open>
-              <summary>大模型设置</summary>
-
-              <label for="ai-api-url">接口 URL</label>
-              <input id="ai-api-url" value="https://api.scnet.cn/api/llm/anthropic/v1/messages">
-
-              <label for="ai-api-key">API Key</label>
-              <input id="ai-api-key" type="password" placeholder="请输入 API Key">
-
-              <label for="ai-model">模型</label>
-              <input id="ai-model" value="MiniMax-M2.5">
-
-              <label for="ai-prompt">生成要求</label>
-              <textarea id="ai-prompt" placeholder="例如：根据当前教学内容生成一道选择题"></textarea>
-
-              <div id="ai-status" class="ai-status"></div>
-            </details>
+            <button id="ai-generate-btn" class="ai-generate-btn" onclick="openAiBuilder()">AI 生成组件</button>
           </div>
         </div>
       </aside>
@@ -886,6 +1067,51 @@
     </div>
   </div>
 
+  <div id="ai-builder-mask" class="ai-builder-mask">
+    <div class="ai-builder">
+      <div class="ai-builder-header">
+        <div class="ai-builder-title">AI 组件生成工作台</div>
+        <button onclick="closeAiBuilder()">关闭</button>
+      </div>
+
+      <div class="ai-builder-body">
+        <div class="ai-builder-settings">
+          <div class="panel-title">模型设置</div>
+
+          <label for="ai-api-url">接口 URL</label>
+          <input id="ai-api-url" value="http://127.0.0.1:8787/ai">
+          <div class="help-text">本地 Chrome 测试默认通过本机代理转发到 SCNet，避免 file:// 跨域失败。</div>
+
+          <label for="ai-api-key">API Key</label>
+          <input id="ai-api-key" type="password" placeholder="请输入 API Key">
+
+          <label for="ai-model">模型</label>
+          <input id="ai-model" value="MiniMax-M2.5">
+
+          <div id="ai-status" class="ai-status"></div>
+        </div>
+
+        <div class="ai-chat-panel">
+          <div id="ai-chat-log" class="ai-chat-log"></div>
+          <div class="ai-chat-input-row">
+            <textarea id="ai-chat-input" placeholder="描述你想生成的组件，例如：生成一个正弦函数定义演示组件，能展示图像并让学生判断周期。"></textarea>
+            <button id="ai-send-btn" class="primary-btn" onclick="sendAiChat()">发送生成</button>
+          </div>
+        </div>
+
+        <div class="ai-preview-panel">
+          <div class="panel-title">组件预览</div>
+          <div class="help-text">生成结果会先显示在这里。确认后再添加到左侧组件栏，之后可正常拖入正文。</div>
+          <div class="inline-actions">
+            <button class="primary-btn" onclick="addAllAiDraftsToSidebar()">全部添加</button>
+            <button onclick="clearAiDrafts()">清空预览</button>
+          </div>
+          <div id="ai-preview-list" class="ai-preview-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const editor = document.getElementById("editor");
     const configContent = document.getElementById("config-content");
@@ -895,6 +1121,10 @@
     const tableGrid = document.getElementById("table-grid");
     const tableSizeLabel = document.getElementById("table-size-label");
     const tableTools = document.getElementById("table-tools");
+    const componentList = document.getElementById("component-list");
+    const aiBuilderMask = document.getElementById("ai-builder-mask");
+    const aiChatLog = document.getElementById("ai-chat-log");
+    const aiPreviewList = document.getElementById("ai-preview-list");
     const dropHintText = "可以从左侧拖入“函数绘图仪”“选择题表单”等交互组件";
     let selectedComponentId = null;
     let selectedImage = null;
@@ -904,6 +1134,9 @@
     let selectedTableCell = null;
     let tablePickerRows = 0;
     let tablePickerCols = 0;
+    let aiTemplateCounter = 0;
+    let aiChatMessages = [];
+    let aiDraftTemplates = [];
 
     const componentRegistry = {
       "function-plot": {
@@ -1031,15 +1264,33 @@
             </section>
           `;
         }
+      },
+
+      "custom-interactive": {
+        name: "自定义交互组件",
+        defaultConfig: {
+          title: "自定义交互组件",
+          summary: "AI 生成的可交互组件。",
+          html: "<div class=\"custom-widget\"><p>这里显示组件内容。</p></div>",
+          css: ".custom-widget { padding: 16px; border-radius: 12px; background: #eff6ff; }",
+          js: ""
+        },
+        renderEditor(config, id) {
+          return `
+            <div class="component-block" contenteditable="false" draggable="true" data-component-id="${id}" data-component-type="custom-interactive">
+              <div class="component-badge">自定义交互组件</div>
+              <div class="component-preview-title">${escapeHtml(config.title || "自定义交互组件")}</div>
+              <div class="component-preview-text">${escapeHtml(config.summary || "拖入后导出为可运行互动组件。")}</div>
+            </div>
+          `;
+        },
+        renderExport(config, id) {
+          return renderCustomInteractiveExport(config, id);
+        }
       }
     };
 
-    document.querySelectorAll(".component-item").forEach(item => {
-      item.addEventListener("dragstart", event => {
-        event.dataTransfer.setData("component-type", item.dataset.type);
-        event.dataTransfer.effectAllowed = "copy";
-      });
-    });
+    document.querySelectorAll(".component-item").forEach(bindComponentItemDrag);
 
     editor.addEventListener("dragstart", event => {
       const block = event.target.closest(".component-block");
@@ -1134,6 +1385,13 @@
     });
 
     buildTablePicker();
+
+    function bindComponentItemDrag(item) {
+      item.addEventListener("dragstart", event => {
+        event.dataTransfer.setData("component-type", item.dataset.type);
+        event.dataTransfer.effectAllowed = "copy";
+      });
+    }
 
     function selectComponent(id) {
       clearImageSelection(false);
@@ -1292,9 +1550,10 @@
       if (!data) return;
 
       const { type, config } = data;
+      const configType = componentRegistry[type]?.baseType || type;
       configContent.className = "";
 
-      if (type === "function-plot") {
+      if (configType === "function-plot") {
         configContent.innerHTML = `
           <label>标题</label>
           <input id="cfg-title" value="${escapeAttr(config.title)}">
@@ -1330,7 +1589,7 @@
         `;
       }
 
-      if (type === "choice-question") {
+      if (configType === "choice-question") {
         configContent.innerHTML = `
           <label>题目</label>
           <textarea id="cfg-question">${escapeHtml(config.question)}</textarea>
@@ -1352,7 +1611,7 @@
         `;
       }
 
-      if (type === "fill-blank") {
+      if (configType === "fill-blank") {
         configContent.innerHTML = `
           <label>题目</label>
           <textarea id="cfg-question">${escapeHtml(config.question)}</textarea>
@@ -1374,7 +1633,7 @@
         `;
       }
 
-      if (type === "info-card") {
+      if (configType === "info-card") {
         configContent.innerHTML = `
           <label>标题</label>
           <input id="cfg-title" value="${escapeAttr(config.title)}">
@@ -1383,6 +1642,29 @@
           <textarea id="cfg-content">${escapeHtml(config.content)}</textarea>
 
           <button class="primary-btn" onclick="saveInfoCardConfig('${id}')">保存配置</button>
+          <button class="danger-btn" onclick="deleteComponent('${id}')">删除组件</button>
+        `;
+      }
+
+      if (configType === "custom-interactive") {
+        configContent.innerHTML = `
+          <label>标题</label>
+          <input id="cfg-title" value="${escapeAttr(config.title || "")}">
+
+          <label>说明</label>
+          <textarea id="cfg-summary">${escapeHtml(config.summary || "")}</textarea>
+
+          <label>HTML</label>
+          <textarea id="cfg-custom-html" class="custom-code-field">${escapeHtml(config.html || "")}</textarea>
+
+          <label>CSS</label>
+          <textarea id="cfg-custom-css" class="custom-code-field">${escapeHtml(config.css || "")}</textarea>
+
+          <label>JavaScript</label>
+          <textarea id="cfg-custom-js" class="custom-code-field">${escapeHtml(config.js || "")}</textarea>
+
+          <div class="help-text">JavaScript 会以 root 为当前组件根节点执行，请使用 root.querySelector 查询内部元素。</div>
+          <button class="primary-btn" onclick="saveCustomInteractiveConfig('${id}')">保存配置</button>
           <button class="danger-btn" onclick="deleteComponent('${id}')">删除组件</button>
         `;
       }
@@ -1423,6 +1705,16 @@
       const data = componentData[id];
       data.config.title = document.getElementById("cfg-title").value;
       data.config.content = document.getElementById("cfg-content").value;
+      refreshComponent(id);
+    }
+
+    function saveCustomInteractiveConfig(id) {
+      const data = componentData[id];
+      data.config.title = document.getElementById("cfg-title").value;
+      data.config.summary = document.getElementById("cfg-summary").value;
+      data.config.html = document.getElementById("cfg-custom-html").value;
+      data.config.css = document.getElementById("cfg-custom-css").value;
+      data.config.js = document.getElementById("cfg-custom-js").value;
       refreshComponent(id);
     }
 
@@ -1902,12 +2194,255 @@
       previewTableSize(0, 0);
     }
 
-    async function generateAiComponent() {
+    function openAiBuilder() {
+      aiBuilderMask.classList.add("open");
+      if (!aiChatMessages.length) {
+        aiChatMessages.push({
+          role: "assistant",
+          content: "描述你想要的组件。我会先生成可预览的组件模板，确认后再加入左侧组件栏。"
+        });
+        renderAiChat();
+      }
+      renderAiDraftPreview();
+      document.getElementById("ai-chat-input").focus();
+    }
+
+    function closeAiBuilder() {
+      aiBuilderMask.classList.remove("open");
+    }
+
+    function renderAiChat() {
+      aiChatLog.innerHTML = aiChatMessages.map(message => `
+        <div class="ai-message ${message.role === "user" ? "user" : "assistant"}">${escapeHtml(message.content)}</div>
+      `).join("");
+      aiChatLog.scrollTop = aiChatLog.scrollHeight;
+    }
+
+    function renderAiDraftPreview() {
+      if (!aiDraftTemplates.length) {
+        aiPreviewList.innerHTML = `<div class="help-text">还没有可预览的组件。</div>`;
+        return;
+      }
+
+      aiPreviewList.innerHTML = aiDraftTemplates.map((template, index) => `
+        <div class="ai-preview-card">
+          <div class="ai-preview-card-title">${escapeHtml(template.name)}</div>
+          <div class="ai-preview-meta">${escapeHtml(componentRegistry[template.baseType].name)} / ${escapeHtml(template.description)}</div>
+          <div class="ai-live-preview">
+            <iframe title="${escapeAttr(template.name)} 预览" srcdoc="${escapeAttr(buildAiTemplatePreviewDocument(template, index))}"></iframe>
+          </div>
+          <details class="ai-preview-code-toggle">
+            <summary>查看配置</summary>
+            <div class="ai-preview-config">${escapeHtml(JSON.stringify(template.defaultConfig, null, 2))}</div>
+          </details>
+          <div class="inline-actions">
+            <button class="primary-btn" onclick="addAiDraftToSidebar(${index})">添加到左侧</button>
+            <button onclick="removeAiDraft(${index})">移除</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function buildAiTemplatePreviewDocument(template, index) {
+      const id = `ai_preview_${index}`;
+      const registry = componentRegistry[template.baseType];
+      const componentHtml = registry.renderExport(template.defaultConfig, id);
+
+      return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      padding: 12px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: #111827;
+      background: #ffffff;
+    }
+
+    .interactive-card {
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 14px;
+      background: #f9fafb;
+    }
+
+    .interactive-card h3 {
+      margin: 0 0 10px;
+      line-height: 1.35;
+    }
+
+    .option-line {
+      display: block;
+      margin: 8px 0;
+      cursor: pointer;
+    }
+
+    .fill-input {
+      display: block;
+      width: min(360px, 100%);
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin: 10px 0;
+    }
+
+    .submit-btn {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      background: #2563eb;
+      color: #ffffff;
+      cursor: pointer;
+    }
+
+    .feedback {
+      font-weight: 700;
+      margin-top: 10px;
+    }
+
+    .plot-canvas {
+      width: 100%;
+      max-width: 520px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+${componentHtml}
+<script>
+  function checkChoice(id) {
+    const card = document.getElementById(id);
+    const selected = card.querySelector("input[type='radio']:checked");
+    const feedback = card.querySelector(".feedback");
+    if (!selected) {
+      feedback.textContent = "请先选择一个答案。";
+      return;
+    }
+    feedback.textContent = selected.value === card.dataset.answer ? card.dataset.correct : card.dataset.wrong;
+  }
+
+  function checkFillBlank(id) {
+    const card = document.getElementById(id);
+    const value = String(card.querySelector(".fill-input").value).trim();
+    const answer = String(card.dataset.answer).trim();
+    card.querySelector(".feedback").textContent = value === answer ? card.dataset.correct : card.dataset.wrong;
+  }
+
+  function drawFunctionPlots() {
+    document.querySelectorAll(".plot-canvas").forEach(canvas => {
+      const ctx = canvas.getContext("2d");
+      const expression = canvas.dataset.expression || "x";
+      const xMin = Number(canvas.dataset.xMin);
+      const xMax = Number(canvas.dataset.xMax);
+      const yMin = Number(canvas.dataset.yMin);
+      const yMax = Number(canvas.dataset.yMax);
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, w, h);
+      const mapX = x => (x - xMin) / (xMax - xMin) * w;
+      const mapY = y => h - (y - yMin) / (yMax - yMin) * h;
+      ctx.strokeStyle = "#e5e7eb";
+      for (let i = 0; i <= 10; i++) {
+        const px = w * i / 10;
+        const py = h * i / 10;
+        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke();
+      }
+      let fn;
+      try {
+        fn = new Function("x", "with (Math) { return " + expression + "; }");
+      } catch (error) {
+        ctx.fillStyle = "#dc2626";
+        ctx.fillText("表达式错误：" + error.message, 12, 24);
+        return;
+      }
+      ctx.strokeStyle = "#2563eb";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i <= w; i++) {
+        const x = xMin + (xMax - xMin) * i / w;
+        const y = fn(x);
+        if (!Number.isFinite(y)) {
+          started = false;
+          continue;
+        }
+        const px = mapX(x);
+        const py = mapY(y);
+        if (!started) {
+          ctx.moveTo(px, py);
+          started = true;
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+      ctx.stroke();
+    });
+  }
+
+  window.addEventListener("load", drawFunctionPlots);
+<\/script>
+</body>
+</html>`;
+    }
+
+    function clearAiDrafts() {
+      aiDraftTemplates = [];
+      renderAiDraftPreview();
+    }
+
+    function addAiDraftToSidebar(index) {
+      const template = aiDraftTemplates[index];
+      if (!template) return;
+      registerAiComponentTemplate(template);
+      aiDraftTemplates.splice(index, 1);
+      renderAiDraftPreview();
+      setAiStatus("已添加到左侧组件栏。", "success");
+    }
+
+    function addAllAiDraftsToSidebar() {
+      if (!aiDraftTemplates.length) return;
+      aiDraftTemplates.forEach(registerAiComponentTemplate);
+      const count = aiDraftTemplates.length;
+      aiDraftTemplates = [];
+      renderAiDraftPreview();
+      setAiStatus(`已添加 ${count} 个组件到左侧组件栏。`, "success");
+    }
+
+    function removeAiDraft(index) {
+      aiDraftTemplates.splice(index, 1);
+      renderAiDraftPreview();
+    }
+
+    async function sendAiChat() {
+      const input = document.getElementById("ai-chat-input");
+      const userPrompt = input.value.trim();
+      if (!userPrompt) return;
+
+      if (looksLikeApiKey(userPrompt)) {
+        setAiStatus("当前输入看起来像 API Key。请把密钥填入左侧 API Key 字段，生成要求里只写组件需求。", "error");
+        return;
+      }
+
+      aiChatMessages.push({ role: "user", content: userPrompt });
+      renderAiChat();
+      input.value = "";
+
+      await generateAiComponent(userPrompt);
+    }
+
+    async function generateAiComponent(userPrompt) {
       const apiUrl = document.getElementById("ai-api-url").value.trim();
       const apiKey = document.getElementById("ai-api-key").value.trim();
       const model = normalizeModelName(document.getElementById("ai-model").value.trim() || "MiniMax-M2.5");
-      const userPrompt = document.getElementById("ai-prompt").value.trim();
-      const button = document.getElementById("ai-generate-btn");
+      const button = document.getElementById("ai-send-btn");
 
       if (!apiUrl) {
         setAiStatus("请先填写接口 URL。", "error");
@@ -1920,8 +2455,8 @@
       }
 
       button.disabled = true;
-      button.textContent = "生成中...";
-      setAiStatus("正在根据当前教学内容生成组件。", "");
+      button.textContent = "生成中";
+      setAiStatus("正在生成可拖拽组件模板。", "");
 
       try {
         const request = buildAiRequest(apiUrl, apiKey, model, userPrompt);
@@ -1934,26 +2469,34 @@
         if (!response.ok) {
           const errorText = await response.text();
           const modelHint = response.status === 422 && errorText.includes("Model Not Exist")
-            ? "。请确认模型名；SCNet MiniMax 默认应使用 MiniMax-M2.5 和 Anthropic messages 接口。"
+            ? "。请确认模型名；SCNet MiniMax 默认应使用 MiniMax-M2.5 和 /api/llm/v1/chat/completions 接口。"
             : "";
           throw new Error(`接口返回 ${response.status}：${errorText.slice(0, 180)}${modelHint}`);
         }
 
         const result = await response.json();
         const content = extractAiContent(result);
-        const generated = normalizeAiGeneratedComponents(parseAiJson(content));
+        const generated = normalizeAiGeneratedTemplates(parseAiJson(content));
 
         if (!generated.length) {
-          throw new Error("模型没有返回可用组件。");
+          throw new Error("模型没有返回可用组件模板。");
         }
 
-        generated.forEach(({ type, config }) => insertGeneratedComponent(type, config));
-        setAiStatus(`已插入 ${generated.length} 个组件。`, "success");
+        aiDraftTemplates = generated;
+        renderAiDraftPreview();
+        aiChatMessages.push({
+          role: "assistant",
+          content: `已生成 ${generated.length} 个组件模板，请在右侧预览后添加到左侧组件栏。`
+        });
+        renderAiChat();
+        setAiStatus(`已生成 ${generated.length} 个组件模板。`, "success");
       } catch (error) {
+        aiChatMessages.push({ role: "assistant", content: `生成失败：${error.message}` });
+        renderAiChat();
         setAiStatus(`生成失败：${error.message}`, "error");
       } finally {
         button.disabled = false;
-        button.textContent = "AI 生成组件";
+        button.textContent = "发送生成";
       }
     }
 
@@ -1962,26 +2505,50 @@
       if (/^minimax[-_\s]?m?2\.5$/i.test(normalized) || /^minimax2\.5$/i.test(normalized)) {
         return "MiniMax-M2.5";
       }
+      if (/^MiniMaxAI\/MiniMax-M2\.5$/i.test(normalized)) return "MiniMax-M2.5";
       return normalized;
     }
 
     function getAiSystemPrompt() {
       return [
-        "你是教学交互组件生成器。",
-        "只能返回 JSON，不要返回 Markdown。",
-        "JSON 格式：{\"components\":[{\"type\":\"choice-question|fill-blank|info-card|function-plot\",\"config\":{...}}]}。",
-        "最多返回 3 个组件。",
-        "choice-question config 字段：question, options(数组), answer, correctFeedback, wrongFeedback。",
-        "fill-blank config 字段：question, answer, placeholder, correctFeedback, wrongFeedback。",
-        "info-card config 字段：title, content。",
-        "function-plot config 字段：title, expression, xMin, xMax, yMin, yMax。",
-        "内容必须适合当前教学页面。"
+        "你是教学交互组件模板生成器，目标是把用户的自然语言需求变成左侧组件栏里可拖拽复用的互动组件。",
+        "只能返回严格 JSON，不要返回 Markdown，不要解释。",
+        "JSON 必须是单个对象，所有 key 和字符串必须使用英文双引号。",
+        "不要在字符串中直接换行；不要使用中文引号；不要漏逗号；不要写注释。",
+        "你的任务不是生成正文里的实例，而是生成可放入左侧组件栏的可复用组件模板；用户之后会拖入正文。",
+        "优先理解用户要的交互流程、输入、按钮、反馈、随机性、状态展示和教学目标。",
+        "JSON 格式：{\"templates\":[{\"name\":\"组件名称\",\"description\":\"一句话说明\",\"baseType\":\"custom-interactive|choice-question|fill-blank|info-card|function-plot\",\"defaultConfig\":{...}}]}。",
+        "最多返回 2 个模板；除非用户明确要选择题、填空题、知识卡片或函数绘图，否则优先使用 custom-interactive。",
+        "custom-interactive defaultConfig 字段：title, summary, html, css, js。",
+        "custom-interactive 的 html 只写组件内部结构，不要写 script/style/html/body；css 尽量作用在组件内部 class 上；js 是函数体，会以 root 参数执行。",
+        "custom-interactive 的 js 必须使用 root.querySelector/root.querySelectorAll 查找元素，不要使用 document.querySelector；可以使用 document.createElement；不要请求网络；不要使用 alert；所有交互应在组件内即时反馈。",
+        "custom-interactive 必须能直接运行，有完整默认状态，有清晰按钮、输入、结果区域、状态反馈和必要的重置/清空按钮。",
+        "如果组件涉及随机、范围、数量、题目数量、时间、阈值或分类，应提供可编辑输入控件，并做输入校验和错误提示。",
+        "如果组件包含历史记录或列表，最多显示最近 10 条，并提供清空按钮，避免无限增长。",
+        "组件初始状态不得预先显示随机结果；必须等待用户操作后才显示结果。",
+        "CSS 必须让组件在 320px 到 700px 宽度内不横向滚动，控件文字不重叠；按钮和输入应有清晰 hover/focus 状态。",
+        "class 名尽量使用组件相关前缀，避免影响页面其他内容。",
+        "比如抽小球组件应包含最大编号输入、抽取容器/按钮、当前结果、最近历史、清空历史和非法输入提示。",
+        "baseType 决定这个自定义组件复用哪一种组件能力。",
+        "choice-question defaultConfig 字段：question, options(数组), answer, correctFeedback, wrongFeedback。",
+        "fill-blank defaultConfig 字段：question, answer, placeholder, correctFeedback, wrongFeedback。",
+        "info-card defaultConfig 字段：title, content。",
+        "function-plot defaultConfig 字段：title, expression, xMin, xMax, yMin, yMax。",
+        "模板内容必须适合当前教学页面，拖入正文后应能作为一个完整互动组件使用。"
       ].join("\\n");
     }
 
     function getAiUserPrompt(userPrompt) {
+      const recentChat = aiChatMessages
+        .slice(-8)
+        .map(message => `${message.role === "user" ? "用户" : "助手"}：${redactSensitiveText(message.content)}`)
+        .join("\\n");
+
       return [
-        userPrompt || "请根据当前教学内容生成一个最合适的交互组件。",
+        userPrompt || "请根据当前教学内容设计一个可复用的交互组件模板，加入左侧组件栏供用户拖拽使用。",
+        "",
+        "最近对话：",
+        recentChat || "无",
         "",
         "当前教学内容：",
         getEditorPlainText()
@@ -1989,7 +2556,7 @@
     }
 
     function buildAiRequest(apiUrl, apiKey, model, userPrompt) {
-      const useAnthropic = /anthropic|\/messages\/?$/i.test(apiUrl) || model === "MiniMax-M2.5";
+      const useAnthropic = /anthropic|\/messages\/?$/i.test(apiUrl);
       const url = useAnthropic ? normalizeAnthropicMessagesUrl(apiUrl) : normalizeChatCompletionsUrl(apiUrl);
       const headers = {
         "Content-Type": "application/json",
@@ -2017,6 +2584,7 @@
         headers,
         body: {
           model,
+          max_tokens: 4096,
           temperature: 0.4,
           messages: [
             { role: "system", content: getAiSystemPrompt() },
@@ -2024,6 +2592,14 @@
           ]
         }
       };
+    }
+
+    function looksLikeApiKey(value) {
+      return /^sk-[A-Za-z0-9_\-=]{20,}$/.test(String(value).trim());
+    }
+
+    function redactSensitiveText(value) {
+      return String(value).replace(/sk-[A-Za-z0-9_\-=]{20,}/g, "[API_KEY_REDACTED]");
     }
 
     function normalizeAnthropicMessagesUrl(url) {
@@ -2036,6 +2612,7 @@
 
     function normalizeChatCompletionsUrl(url) {
       const trimmed = url.replace(/\/+$/, "");
+      if (/^https?:\/\/(127\.0\.0\.1|localhost):8787\/ai$/i.test(trimmed)) return trimmed;
       return trimmed.endsWith("/chat/completions") ? trimmed : `${trimmed}/chat/completions`;
     }
 
@@ -2073,61 +2650,194 @@
     }
 
     function parseAiJson(content) {
-      const cleaned = String(content)
+      const cleaned = extractJsonLikeText(content);
+      const candidates = [
+        cleaned,
+        repairJsonLikeText(cleaned)
+      ];
+
+      let lastError = null;
+      for (const candidate of candidates) {
+        try {
+          return JSON.parse(candidate);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw new Error(`${lastError.message}。模型返回片段：${cleaned.slice(0, 160)}`);
+    }
+
+    function extractJsonLikeText(content) {
+      const text = String(content)
         .replace(/```json/gi, "")
         .replace(/```/g, "")
         .trim();
 
-      try {
-        return JSON.parse(cleaned);
-      } catch (error) {
-        const match = cleaned.match(/\{[\s\S]*\}/);
-        if (!match) throw error;
-        return JSON.parse(match[0]);
-      }
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start === -1 || end === -1 || end <= start) return text;
+      return text.slice(start, end + 1);
     }
 
-    function normalizeAiGeneratedComponents(payload) {
-      const rawComponents = Array.isArray(payload) ? payload : payload?.components;
-      if (!Array.isArray(rawComponents)) return [];
+    function repairJsonLikeText(text) {
+      return String(text)
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'")
+        .replace(/，/g, ",")
+        .replace(/：/g, ":")
+        .replace(/,\s*([}\]])/g, "$1")
+        .replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)(\s*:)/g, '$1"$2"$3')
+        .replace(/("(?:[^"\\]|\\.)*"|\d+(?:\.\d+)?|true|false|null|[}\]])\s*\n\s*(")/g, "$1,\n$2")
+        .replace(/([}\]])\s*\n\s*([{\[])/g, "$1,\n$2");
+    }
 
-      return rawComponents
+    function normalizeAiGeneratedTemplates(payload) {
+      const rawTemplates = Array.isArray(payload) ? payload : payload?.templates || payload?.componentTemplates || payload?.components;
+      if (!Array.isArray(rawTemplates)) return [];
+
+      return rawTemplates
         .map(item => {
-          const type = item?.type;
-          if (!componentRegistry[type]) return null;
+          const baseType = normalizeBaseType(item?.baseType || item?.type || item?.componentType || item?.kind);
+          if (!componentRegistry[baseType]) return null;
           return {
-            type,
-            config: sanitizeGeneratedConfig(type, item.config || {})
+            name: String(item?.name || componentRegistry[baseType].name).slice(0, 24),
+            description: String(item?.description || "AI 生成的自定义组件").slice(0, 80),
+            baseType,
+            defaultConfig: sanitizeGeneratedConfig(baseType, item.defaultConfig || item.config || {})
           };
         })
         .filter(Boolean)
         .slice(0, 3);
     }
 
-    function sanitizeGeneratedConfig(type, config) {
-      const defaults = deepClone(componentRegistry[type].defaultConfig);
+    function normalizeBaseType(value) {
+      const normalized = String(value || "").trim().toLowerCase().replaceAll("_", "-").replaceAll(" ", "-");
+      const aliases = {
+        "function-plot": "function-plot",
+        "plot": "function-plot",
+        "graph": "function-plot",
+        "函数绘图仪": "function-plot",
+        "函数图像": "function-plot",
+        "选择题表单": "choice-question",
+        "选择题": "choice-question",
+        "choice": "choice-question",
+        "choice-question": "choice-question",
+        "multiple-choice": "choice-question",
+        "填空题": "fill-blank",
+        "填空": "fill-blank",
+        "fill": "fill-blank",
+        "fill-blank": "fill-blank",
+        "知识卡片": "info-card",
+        "卡片": "info-card",
+        "info": "info-card",
+        "info-card": "info-card",
+        "custom": "custom-interactive",
+        "ai-custom": "custom-interactive",
+        "custom-interactive": "custom-interactive",
+        "interactive": "custom-interactive",
+        "自定义": "custom-interactive",
+        "自定义组件": "custom-interactive",
+        "交互组件": "custom-interactive",
+        "自定义交互组件": "custom-interactive"
+      };
+      return aliases[normalized] || normalized;
+    }
+
+    function sanitizeGeneratedConfig(baseType, config) {
+      const defaults = deepClone(componentRegistry[baseType].defaultConfig);
       const merged = { ...defaults, ...config };
 
-      if (type === "choice-question") {
+      if (baseType === "choice-question") {
         merged.options = Array.isArray(merged.options) ? merged.options.map(String).filter(Boolean).slice(0, 6) : defaults.options;
         if (!merged.options.includes(String(merged.answer))) merged.answer = merged.options[0] || defaults.answer;
       }
 
-      if (type === "function-plot") {
-        merged.xMin = Number.isFinite(Number(merged.xMin)) ? Number(merged.xMin) : defaults.xMin;
-        merged.xMax = Number.isFinite(Number(merged.xMax)) ? Number(merged.xMax) : defaults.xMax;
-        merged.yMin = Number.isFinite(Number(merged.yMin)) ? Number(merged.yMin) : defaults.yMin;
-        merged.yMax = Number.isFinite(Number(merged.yMax)) ? Number(merged.yMax) : defaults.yMax;
+      if (baseType === "function-plot") {
+        merged.expression = normalizeFunctionExpression(merged.expression || defaults.expression);
+        merged.xMin = parseAiNumber(merged.xMin, defaults.xMin);
+        merged.xMax = parseAiNumber(merged.xMax, defaults.xMax);
+        merged.yMin = parseAiNumber(merged.yMin, defaults.yMin);
+        merged.yMax = parseAiNumber(merged.yMax, defaults.yMax);
+        if (merged.xMin >= merged.xMax) {
+          merged.xMin = defaults.xMin;
+          merged.xMax = defaults.xMax;
+        }
+        if (merged.yMin >= merged.yMax) {
+          merged.yMin = defaults.yMin;
+          merged.yMax = defaults.yMax;
+        }
+      }
+
+      if (baseType === "custom-interactive") {
+        merged.title = String(merged.title || defaults.title).slice(0, 40);
+        merged.summary = String(merged.summary || merged.description || defaults.summary).slice(0, 140);
+        merged.html = String(merged.html || defaults.html).slice(0, 8000);
+        merged.css = String(merged.css || defaults.css).slice(0, 8000);
+        merged.js = String(merged.js || defaults.js).slice(0, 8000);
       }
 
       return merged;
     }
 
-    function insertGeneratedComponent(type, config) {
-      const id = "comp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-      componentData[id] = { id, type, config };
-      insertHtmlAtCursor(componentRegistry[type].renderEditor(config, id));
-      selectComponent(id);
+    function normalizeFunctionExpression(expression) {
+      let value = String(expression || "x").trim();
+      value = value.replace(/^y\s*=\s*/i, "");
+      value = value.replace(/^f\s*\(\s*x\s*\)\s*=\s*/i, "");
+      value = value.replaceAll("Math.", "");
+      value = value.replaceAll("π", "PI");
+      value = value.replaceAll("^", "**");
+      return value || "x";
+    }
+
+    function parseAiNumber(value, fallback) {
+      if (Number.isFinite(Number(value))) return Number(value);
+      const text = String(value ?? "").trim();
+      if (!text) return fallback;
+      const normalized = text
+        .replaceAll("π", "PI")
+        .replace(/(?<=\d)PI/g, "*PI")
+        .replace(/PI(?=\d)/g, "PI*");
+
+      if (!/^[0-9+\-*/().\sPI]+$/.test(normalized)) return fallback;
+
+      try {
+        const result = Function("PI", `"use strict"; return (${normalized});`)(Math.PI);
+        return Number.isFinite(result) ? result : fallback;
+      } catch (error) {
+        return fallback;
+      }
+    }
+
+    function registerAiComponentTemplate(template) {
+      const type = "ai_" + Date.now() + "_" + (++aiTemplateCounter);
+      const base = componentRegistry[template.baseType];
+
+      componentRegistry[type] = {
+        name: template.name,
+        baseType: template.baseType,
+        isAiTemplate: true,
+        defaultConfig: template.defaultConfig,
+        renderEditor(config, id) {
+          return base.renderEditor(config, id)
+            .replace(`data-component-type="${template.baseType}"`, `data-component-type="${type}"`)
+            .replace(`<div class="component-badge">${escapeHtml(base.name)}</div>`, `<div class="component-badge">${escapeHtml(template.name)}</div>`);
+        },
+        renderExport(config, id) {
+          return base.renderExport(config, id);
+        }
+      };
+
+      const item = document.createElement("div");
+      item.className = "component-item ai-component";
+      item.draggable = true;
+      item.dataset.type = type;
+      item.innerHTML = `
+        <div class="component-name">${escapeHtml(template.name)}</div>
+        <div class="component-desc">${escapeHtml(template.description)}</div>
+      `;
+      componentList.appendChild(item);
+      bindComponentItemDrag(item);
     }
 
     function selectTableCell(cell) {
@@ -2266,6 +2976,54 @@
       const number = Number.parseInt(value, 10);
       if (!Number.isFinite(number)) return null;
       return Math.min(max, Math.max(min, number));
+    }
+
+    function renderCustomInteractiveExport(config, id) {
+      const html = sanitizeCustomHtml(config.html || "");
+      const css = sanitizeCustomStyle(config.css || "");
+      const js = String(config.js || "");
+
+      return `
+        <section class="interactive-card ai-custom-component" id="${id}">
+          <h3>${escapeHtml(config.title || "自定义交互组件")}</h3>
+          <div class="ai-custom-root">
+            ${html}
+          </div>
+        </section>
+        <style>
+          ${css}
+        </style>
+        <script>
+          (function() {
+            const root = document.getElementById("${escapeAttr(id)}")?.querySelector(".ai-custom-root");
+            if (!root) return;
+            try {
+              new Function("root", ${serializeScriptString(js)})(root);
+            } catch (error) {
+              const message = document.createElement("p");
+              message.style.color = "#dc2626";
+              message.textContent = "组件脚本运行失败：" + error.message;
+              root.appendChild(message);
+            }
+          })();
+        <\/script>
+      `;
+    }
+
+    function sanitizeCustomHtml(html) {
+      return String(html)
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+        .replace(/<\/(style|textarea|title)>/gi, match => match.replace("</", "<\\/"));
+    }
+
+    function sanitizeCustomStyle(css) {
+      return String(css)
+        .replace(/<\/style/gi, "<\\/style")
+        .replace(/<script/gi, "&lt;script");
+    }
+
+    function serializeScriptString(js) {
+      return JSON.stringify(String(js)).replace(/<\/script/gi, "<\\/script");
     }
 
     function exportFullHtml() {
