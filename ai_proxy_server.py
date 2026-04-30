@@ -721,6 +721,39 @@ def stream_with_curl(upstream, body, content_type, authorization):
             pass
 
 
+def stream_with_urllib(upstream, body, content_type, authorization):
+    headers = {"Content-Type": content_type}
+    if authorization:
+        headers["Authorization"] = authorization
+
+    request_timeout = REQUEST_TIMEOUT if REQUEST_TIMEOUT > 0 else 180
+    req = urllib.request.Request(upstream, data=body, headers=headers, method="POST")
+
+    try:
+        with urllib.request.urlopen(req, timeout=request_timeout) as resp:
+            while True:
+                chunk = resp.readline()
+                if not chunk:
+                    break
+                yield chunk
+    except urllib.error.HTTPError as exc:
+        error_text = exc.read().decode("utf-8", errors="replace")
+        payload = json.dumps(
+            {"error": f"接口返回 {exc.code}：{error_text[:500]}"},
+            ensure_ascii=False,
+        )
+        yield f"event: error\ndata: {payload}\n\n".encode("utf-8")
+    except Exception as exc:
+        payload = json.dumps({"error": str(exc)}, ensure_ascii=False)
+        yield f"event: error\ndata: {payload}\n\n".encode("utf-8")
+
+
+def stream_upstream(upstream, body, content_type, authorization):
+    if "generativelanguage.googleapis.com" in upstream:
+        return stream_with_urllib(upstream, body, content_type, authorization)
+    return stream_with_curl(upstream, body, content_type, authorization)
+
+
 def proxy_with_curl(upstream, body, content_type, authorization, component_request=None):
     try:
         status, response_content_type, response_body = post_upstream(
@@ -788,7 +821,7 @@ def proxy_with_curl(upstream, body, content_type, authorization, component_reque
 
 def proxy_stream_with_curl(upstream, body, content_type, authorization):
     return Response(
-        stream_with_curl(upstream, body, content_type, authorization),
+        stream_upstream(upstream, body, content_type, authorization),
         content_type="text/event-stream; charset=utf-8",
         direct_passthrough=True,
     )

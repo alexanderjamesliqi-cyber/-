@@ -2615,7 +2615,7 @@ ${componentHtml}
       let assistantMessage = null;
 
       try {
-        const request = buildAiRequest(provider, model, userPrompt, false);
+        const request = buildAiRequest(provider, model, userPrompt, true);
         const controller = new AbortController();
         aiGenerationController = controller;
         assistantMessage = {
@@ -2628,16 +2628,54 @@ ${componentHtml}
         renderAiChat();
         stopWaitingStatus = startAiWaitingStatus(providerLabel, model, assistantMessage, receiveStats);
 
-        const result = await fetchAiResponse(request, controller.signal, chars => {
-          receiveStats.receivedChars = chars;
-          if (typeof receiveStats.render === "function") receiveStats.render();
-        });
+        let content = "";
+        let usedFallbackRequest = false;
+        try {
+          content = await fetchAiStream(request, controller.signal, delta => {
+            receiveStats.receivedChars += delta.length;
+            if (typeof receiveStats.render === "function") receiveStats.render();
+          });
+        } catch (streamError) {
+          if (streamError.name === "AbortError") throw streamError;
+          usedFallbackRequest = true;
+          assistantMessage.content = [
+            "流式接收失败，正在切换到完整响应校验。",
+            `原因：${streamError.message}`,
+            `已接收：${receiveStats.receivedChars} 个字符`
+          ].join("\n");
+          renderAiChat();
+          const fallbackRequest = buildAiRequest(provider, model, userPrompt, false);
+          const result = await fetchAiResponse(fallbackRequest, controller.signal, chars => {
+            receiveStats.receivedChars = chars;
+            if (typeof receiveStats.render === "function") receiveStats.render();
+          });
+          content = extractAiContent(result);
+        }
         stopWaitingStatus();
         stopWaitingStatus = () => {};
-        const content = extractAiContent(result);
         receiveStats.receivedChars = content.length;
-        const generated = normalizeAiGeneratedTemplates(parseAiJson(content))
-          .map(repairCanvasTemplate);
+        let generated = [];
+        try {
+          generated = normalizeAiGeneratedTemplates(parseAiJson(content))
+            .map(repairCanvasTemplate);
+        } catch (parseError) {
+          if (usedFallbackRequest) throw parseError;
+          assistantMessage.content = [
+            "流式内容已接收，但 JSON 校验失败，正在请求后端重新生成。",
+            `已接收：${receiveStats.receivedChars} 个字符`
+          ].join("\n");
+          renderAiChat();
+          usedFallbackRequest = true;
+          const fallbackRequest = buildAiRequest(provider, model, userPrompt, false);
+          const result = await fetchAiResponse(fallbackRequest, controller.signal, chars => {
+            receiveStats.receivedChars = chars;
+            if (typeof receiveStats.render === "function") receiveStats.render();
+          });
+          content = extractAiContent(result);
+          receiveStats.receivedChars = content.length;
+          generated = normalizeAiGeneratedTemplates(parseAiJson(content))
+            .map(repairCanvasTemplate);
+        }
 
         if (!generated.length) {
           throw new Error("模型没有返回可用组件模板。");
