@@ -3,6 +3,8 @@ import os
 import re
 import subprocess
 import tempfile
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -53,14 +55,16 @@ DEFAULT_MODEL_CONFIG = {
             "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
             "apiKey": os.environ.get("GOOGLE_API_KEY", "PASTE_GOOGLE_API_KEY"),
             "models": [
-                {"id": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro Preview"},
-                {"id": "gemini-3.1-flash", "label": "Gemini 3.1 Flash"},
-                {"id": "gemini-3.1-flash-lite-preview", "label": "Gemini 3.1 Flash-Lite Preview"},
-                {"id": "gemini-3-pro-preview", "label": "Gemini 3 Pro Preview"},
-                {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
                 {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
                 {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash-Lite"},
+                {"id": "gemini-3.1-flash-lite-preview", "label": "Gemini 3.1 Flash-Lite Preview"},
+                {"id": "gemini-3-flash-preview", "label": "Gemini 3 Flash Preview"},
+                {"id": "gemini-flash-lite-latest", "label": "Gemini Flash-Lite Latest"},
+                {"id": "gemini-flash-latest", "label": "Gemini Flash Latest"},
                 {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
+                {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
+                {"id": "gemini-3-pro-preview", "label": "Gemini 3 Pro Preview"},
+                {"id": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro Preview"},
             ],
         },
     ]
@@ -623,6 +627,44 @@ def post_with_curl(upstream, body, content_type, authorization):
                 pass
 
 
+def post_with_urllib(upstream, body, content_type, authorization):
+    headers = {"Content-Type": content_type}
+    if authorization:
+        headers["Authorization"] = authorization
+
+    request_timeout = REQUEST_TIMEOUT if REQUEST_TIMEOUT > 0 else 180
+    req = urllib.request.Request(upstream, data=body, headers=headers, method="POST")
+
+    try:
+        with urllib.request.urlopen(req, timeout=request_timeout) as resp:
+            response_body = resp.read()
+            response_content_type = resp.headers.get(
+                "content-type", "application/json; charset=utf-8"
+            )
+            return resp.status, response_content_type, response_body
+    except urllib.error.HTTPError as exc:
+        response_body = exc.read()
+        response_content_type = exc.headers.get(
+            "content-type", "application/json; charset=utf-8"
+        )
+        return exc.code, response_content_type, response_body
+
+
+def post_upstream(upstream, body, content_type, authorization):
+    if "generativelanguage.googleapis.com" in upstream:
+        return post_with_urllib(upstream, body, content_type, authorization)
+
+    try:
+        return post_with_curl(upstream, body, content_type, authorization)
+    except Exception as curl_error:
+        try:
+            return post_with_urllib(upstream, body, content_type, authorization)
+        except Exception as urllib_error:
+            raise RuntimeError(
+                f"curl 转发失败：{curl_error}；urllib 转发失败：{urllib_error}"
+            ) from urllib_error
+
+
 def stream_with_curl(upstream, body, content_type, authorization):
     request_file = tempfile.NamedTemporaryFile(delete=False)
     proc = None
@@ -681,7 +723,7 @@ def stream_with_curl(upstream, body, content_type, authorization):
 
 def proxy_with_curl(upstream, body, content_type, authorization, component_request=None):
     try:
-        status, response_content_type, response_body = post_with_curl(
+        status, response_content_type, response_body = post_upstream(
             upstream, body, content_type, authorization
         )
     except Exception as exc:
@@ -705,7 +747,7 @@ def proxy_with_curl(upstream, body, content_type, authorization, component_reque
                 attempt,
             )
             try:
-                status, response_content_type, response_body = post_with_curl(
+                status, response_content_type, response_body = post_upstream(
                     upstream,
                     retry_body,
                     content_type,
