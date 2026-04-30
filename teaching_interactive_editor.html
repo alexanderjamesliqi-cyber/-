@@ -213,6 +213,7 @@
     }
 
     .ai-status {
+      display: none;
       min-height: 18px;
       font-size: 12px;
       line-height: 1.5;
@@ -1246,6 +1247,7 @@
     let aiChatMessages = [];
     let aiDraftTemplates = [];
     let aiGenerationController = null;
+    let aiActiveAssistantMessage = null;
 
     const componentRegistry = {
       "function-plot": {
@@ -2566,8 +2568,11 @@ ${componentHtml}
 
     async function sendAiChat() {
       if (aiGenerationController) {
+        if (aiActiveAssistantMessage) {
+          aiActiveAssistantMessage.content = "正在停止生成请求，等待浏览器中断连接...";
+          renderAiChat();
+        }
         aiGenerationController.abort();
-        setAiStatus("正在停止生成请求。", "loading");
         return;
       }
 
@@ -2605,23 +2610,32 @@ ${componentHtml}
 
       button.disabled = false;
       button.textContent = "停止生成";
-      const stopWaitingStatus = startAiWaitingStatus(providerLabel, model);
+      const receiveStats = { receivedChars: 0 };
+      let stopWaitingStatus = () => {};
       let assistantMessage = null;
 
       try {
         const request = buildAiRequest(provider, model, userPrompt, false);
         const controller = new AbortController();
         aiGenerationController = controller;
-	        assistantMessage = {
-	          role: "assistant",
-	          content: "正在生成组件模板，后端会校验 JSON；如果解析失败，会要求模型重新生成。",
-	          streaming: true
-	        };
+        assistantMessage = {
+          role: "assistant",
+          content: "",
+          streaming: true
+        };
+        aiActiveAssistantMessage = assistantMessage;
         aiChatMessages.push(assistantMessage);
         renderAiChat();
+        stopWaitingStatus = startAiWaitingStatus(providerLabel, model, assistantMessage, receiveStats);
 
-        const result = await fetchAiResponse(request, controller.signal);
+        const result = await fetchAiResponse(request, controller.signal, chars => {
+          receiveStats.receivedChars = chars;
+          if (typeof receiveStats.render === "function") receiveStats.render();
+        });
+        stopWaitingStatus();
+        stopWaitingStatus = () => {};
         const content = extractAiContent(result);
+        receiveStats.receivedChars = content.length;
         const generated = normalizeAiGeneratedTemplates(parseAiJson(content))
           .map(repairCanvasTemplate);
 
@@ -2632,10 +2646,9 @@ ${componentHtml}
         aiDraftTemplates = generated;
         renderAiDraftPreview();
         saveAiDraftTemplates();
-        assistantMessage.content = `已生成 ${generated.length} 个组件模板，请在右侧预览后添加到左侧组件栏。`;
+        assistantMessage.content = `已生成 ${generated.length} 个组件模板。已接收 ${content.length} 个字符，请在右侧预览后添加到左侧组件栏。`;
         assistantMessage.streaming = false;
         renderAiChat();
-        setAiStatus(`已生成 ${generated.length} 个组件模板。`, "success");
       } catch (error) {
         const message = error.name === "AbortError"
           ? "已停止生成。"
@@ -2644,19 +2657,21 @@ ${componentHtml}
           assistantMessage = { role: "assistant", content: "", streaming: false };
           aiChatMessages.push(assistantMessage);
         }
-        assistantMessage.content = error.name === "AbortError" ? message : `生成失败：${message}`;
+        assistantMessage.content = error.name === "AbortError"
+          ? `${message} 已接收 ${receiveStats.receivedChars} 个字符。`
+          : `生成失败：${message}\n已接收：${receiveStats.receivedChars} 个字符`;
         assistantMessage.streaming = false;
         renderAiChat();
-        setAiStatus(error.name === "AbortError" ? message : `生成失败：${message}`, error.name === "AbortError" ? "" : "error");
       } finally {
         stopWaitingStatus();
         aiGenerationController = null;
+        aiActiveAssistantMessage = null;
         button.disabled = false;
         button.textContent = "发送生成";
       }
     }
 
-    async function fetchAiResponse(request, signal) {
+    async function fetchAiResponse(request, signal, onReceivedChars) {
       const response = await fetch(request.url, {
         method: "POST",
         headers: request.headers,
@@ -2664,22 +2679,45 @@ ${componentHtml}
         signal
       });
 
-	      const text = await response.text();
-	      if (!response.ok) {
-	        let detail = text;
-	        try {
-	          detail = JSON.parse(text).error || text;
-	        } catch (error) {
-	          detail = text;
-	        }
-	        throw new Error(`接口返回 ${response.status}：${String(detail).slice(0, 180)}`);
-	      }
+      const text = await readResponseTextWithProgress(response, onReceivedChars);
+      if (!response.ok) {
+        let detail = text;
+        try {
+          detail = JSON.parse(text).error || text;
+        } catch (error) {
+          detail = text;
+        }
+        throw new Error(`接口返回 ${response.status}：${String(detail).slice(0, 180)}`);
+      }
 
       try {
         return JSON.parse(text);
       } catch (error) {
         throw new Error(`本地代理返回的不是合法 JSON：${text.slice(0, 180)}`);
       }
+    }
+
+    async function readResponseTextWithProgress(response, onReceivedChars) {
+      if (!response.body || !response.body.getReader) {
+        const text = await response.text();
+        if (typeof onReceivedChars === "function") onReceivedChars(text.length);
+        return text;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let text = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        if (typeof onReceivedChars === "function") onReceivedChars(text.length);
+      }
+
+      text += decoder.decode();
+      if (typeof onReceivedChars === "function") onReceivedChars(text.length);
+      return text;
     }
 
     async function loadAiModelConfig() {
@@ -2842,7 +2880,7 @@ ${componentHtml}
         .replace(/^-+|-+$/g, "") || "custom-provider";
     }
 
-    function startAiWaitingStatus(providerLabel, model) {
+    function startAiWaitingStatus(providerLabel, model, assistantMessage, stats) {
       const startedAt = Date.now();
       const phases = [
         "正在连接本地代理",
@@ -2855,12 +2893,23 @@ ${componentHtml}
       const render = () => {
         const seconds = Math.floor((Date.now() - startedAt) / 1000);
         const phase = phases[Math.min(Math.floor(seconds / 15), phases.length - 1)];
-        setAiStatus(`${phase}。${providerLabel} / ${model} 已等待 ${seconds}s。`, "loading");
+        const chars = Number(stats?.receivedChars || 0);
+        assistantMessage.content = [
+          `${phase}`,
+          `模型：${providerLabel} / ${model}`,
+          `已等待：${seconds}s`,
+          `已接收：${chars} 个字符`
+        ].join("\n");
+        renderAiChat();
       };
 
       render();
+      stats.render = render;
       const timer = window.setInterval(render, 1000);
-      return () => window.clearInterval(timer);
+      return () => {
+        window.clearInterval(timer);
+        if (stats) delete stats.render;
+      };
     }
 
     async function fetchAiStream(request, signal, onDelta) {
