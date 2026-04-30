@@ -143,6 +143,28 @@
       font-weight: 800;
     }
 
+    .component-item-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .component-delete-btn {
+      flex: 0 0 auto;
+      border: none;
+      border-radius: 6px;
+      padding: 3px 7px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .component-delete-btn:hover {
+      background: #fecaca;
+    }
+
     .ai-panel {
       display: grid;
       gap: 10px;
@@ -195,6 +217,10 @@
       font-size: 12px;
       line-height: 1.5;
       color: #6b7280;
+    }
+
+    .ai-status.loading {
+      color: #1d4ed8;
     }
 
     .ai-status.error {
@@ -279,6 +305,23 @@
       font-size: 12px;
     }
 
+    .model-manager {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .model-manager summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      color: #374151;
+    }
+
+    .model-manager .inline-actions button {
+      min-width: 0;
+    }
+
     .ai-chat-panel {
       display: grid;
       grid-template-rows: 1fr auto;
@@ -315,6 +358,26 @@
       border: 1px solid #e5e7eb;
       color: #111827;
       border-bottom-left-radius: 4px;
+    }
+
+    .ai-message.streaming {
+      border-color: #93c5fd;
+    }
+
+    .ai-message.streaming::after {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 1em;
+      margin-left: 4px;
+      vertical-align: -2px;
+      background: #2563eb;
+      animation: ai-caret-blink 0.9s steps(2, start) infinite;
+    }
+
+    @keyframes ai-caret-blink {
+      0%, 45% { opacity: 1; }
+      46%, 100% { opacity: 0; }
     }
 
     .ai-chat-input-row {
@@ -1095,15 +1158,34 @@
         <div class="ai-builder-settings">
           <div class="panel-title">模型设置</div>
 
-          <label for="ai-api-url">接口 URL</label>
-          <input id="ai-api-url" value="http://127.0.0.1:8787/ai">
-          <div class="help-text">本地 Chrome 测试默认通过本机代理转发到 SCNet，避免 file:// 跨域失败。</div>
-
-          <label for="ai-api-key">API Key</label>
-          <input id="ai-api-key" type="password" value="sk-NTM3LTExNDM5MDM2Njk3LTE3NzM2MzU5NjM4Njc=" placeholder="请输入 API Key">
+          <label for="ai-provider">大模型提供商</label>
+          <select id="ai-provider" onchange="updateAiModelOptions()">
+          </select>
 
           <label for="ai-model">模型</label>
-          <input id="ai-model" value="MiniMax-M2.5">
+          <select id="ai-model" onchange="fillModelManagerFromSelection()"></select>
+          <div class="help-text">API Key 保存到本地 Flask 代理的 model.config，前端只读取提供商和模型列表。</div>
+
+          <details class="model-manager">
+            <summary>添加 / 更新模型</summary>
+            <label for="model-provider-name">提供商名称</label>
+            <input id="model-provider-name" placeholder="例如 NVIDIA">
+
+            <label for="model-provider-url">提供商 URL</label>
+            <input id="model-provider-url" placeholder="https://.../chat/completions">
+
+            <label for="model-api-key">API Key</label>
+            <input id="model-api-key" type="password" placeholder="只保存到本地 model.config">
+
+            <label for="model-name-input">模型名称</label>
+            <input id="model-name-input" placeholder="例如 deepseek-ai/deepseek-v4-flash">
+
+            <div class="inline-actions">
+              <button class="primary-btn" onclick="saveModelConfigFromForm()">保存模型</button>
+              <button class="danger-btn" onclick="deleteSelectedModelConfig()">删除当前模型</button>
+            </div>
+            <div class="help-text">保存后会立即刷新上方下拉框。删除只移除当前选中的模型配置。</div>
+          </details>
 
           <div id="ai-status" class="ai-status"></div>
         </div>
@@ -1142,6 +1224,15 @@
     const aiBuilderMask = document.getElementById("ai-builder-mask");
     const aiChatLog = document.getElementById("ai-chat-log");
     const aiPreviewList = document.getElementById("ai-preview-list");
+    if (window.location.protocol === "file:") {
+      window.location.replace("http://127.0.0.1:8787/");
+    }
+    const localAiProxyUrl = "/ai";
+    const localAiModelsUrl = "/models";
+    const localAiProxyStreamUrl = "/ai/stream";
+    const savedAiComponentsKey = "teaching-editor-ai-components-v1";
+    const savedAiDraftsKey = "teaching-editor-ai-drafts-v1";
+    let aiModelConfig = { providers: [] };
     const dropHintText = "可以从左侧拖入“函数绘图仪”“选择题表单”等交互组件";
     let selectedComponentId = null;
     let selectedImage = null;
@@ -1154,6 +1245,7 @@
     let aiTemplateCounter = 0;
     let aiChatMessages = [];
     let aiDraftTemplates = [];
+    let aiGenerationController = null;
 
     const componentRegistry = {
       "function-plot": {
@@ -1343,17 +1435,7 @@
       const type = event.dataTransfer.getData("component-type");
       if (!type || !componentRegistry[type]) return;
 
-      editor.focus();
-      removeDropHint();
-
-      const id = "comp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-      const config = deepClone(componentRegistry[type].defaultConfig);
-
-      componentData[id] = { id, type, config };
-
-      insertHtmlAtEditorBlockPosition(componentRegistry[type].renderEditor(config, id), event.clientY);
-      selectComponent(id);
-      updateDropHint();
+      insertComponentIntoEditor(type, event.clientY);
     });
 
     editor.addEventListener("input", updateDropHint);
@@ -1408,6 +1490,32 @@
         event.dataTransfer.setData("component-type", item.dataset.type);
         event.dataTransfer.effectAllowed = "copy";
       });
+      item.addEventListener("click", event => {
+        if (event.target.closest("button")) return;
+        insertComponentIntoEditor(item.dataset.type);
+      });
+      item.title = "拖入正文，或点击直接插入";
+    }
+
+    function insertComponentIntoEditor(type, y = null) {
+      if (!type || !componentRegistry[type]) return;
+
+      editor.focus();
+      removeDropHint();
+
+      const id = "comp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      const config = deepClone(componentRegistry[type].defaultConfig);
+
+      componentData[id] = { id, type, config };
+
+      if (typeof y === "number") {
+        insertHtmlAtEditorBlockPosition(componentRegistry[type].renderEditor(config, id), y);
+      } else {
+        editor.insertAdjacentHTML("beforeend", componentRegistry[type].renderEditor(config, id));
+      }
+
+      selectComponent(id);
+      updateDropHint();
     }
 
     function selectComponent(id) {
@@ -1727,11 +1835,13 @@
 
     function saveCustomInteractiveConfig(id) {
       const data = componentData[id];
-      data.config.title = document.getElementById("cfg-title").value;
-      data.config.summary = document.getElementById("cfg-summary").value;
-      data.config.html = document.getElementById("cfg-custom-html").value;
-      data.config.css = document.getElementById("cfg-custom-css").value;
-      data.config.js = document.getElementById("cfg-custom-js").value;
+      data.config = normalizeCustomInteractiveConfig({
+        title: document.getElementById("cfg-title").value,
+        summary: document.getElementById("cfg-summary").value,
+        html: document.getElementById("cfg-custom-html").value,
+        css: document.getElementById("cfg-custom-css").value,
+        js: document.getElementById("cfg-custom-js").value
+      });
       refreshComponent(id);
     }
 
@@ -2213,6 +2323,7 @@
 
     function openAiBuilder() {
       aiBuilderMask.classList.add("open");
+      loadAiModelConfig();
       if (!aiChatMessages.length) {
         aiChatMessages.push({
           role: "assistant",
@@ -2230,7 +2341,7 @@
 
     function renderAiChat() {
       aiChatLog.innerHTML = aiChatMessages.map(message => `
-        <div class="ai-message ${message.role === "user" ? "user" : "assistant"}">${escapeHtml(message.content)}</div>
+        <div class="ai-message ${message.role === "user" ? "user" : "assistant"}${message.streaming ? " streaming" : ""}">${escapeHtml(message.content || (message.streaming ? "正在等待模型输出..." : ""))}</div>
       `).join("");
       aiChatLog.scrollTop = aiChatLog.scrollHeight;
     }
@@ -2246,7 +2357,7 @@
           <div class="ai-preview-card-title">${escapeHtml(template.name)}</div>
           <div class="ai-preview-meta">${escapeHtml(componentRegistry[template.baseType].name)} / ${escapeHtml(template.description)}</div>
           <div class="ai-live-preview">
-            <iframe title="${escapeAttr(template.name)} 预览" srcdoc="${escapeAttr(buildAiTemplatePreviewDocument(template, index))}"></iframe>
+            <iframe title="${escapeAttr(template.name)} 预览" data-ai-preview-index="${index}"></iframe>
           </div>
           <details class="ai-preview-code-toggle">
             <summary>查看配置</summary>
@@ -2258,6 +2369,12 @@
           </div>
         </div>
       `).join("");
+
+      aiPreviewList.querySelectorAll("iframe[data-ai-preview-index]").forEach(iframe => {
+        const index = Number.parseInt(iframe.dataset.aiPreviewIndex, 10);
+        const template = aiDraftTemplates[index];
+        if (template) iframe.srcdoc = buildAiTemplatePreviewDocument(template, index);
+      });
     }
 
     function buildAiTemplatePreviewDocument(template, index) {
@@ -2330,7 +2447,12 @@
   </style>
 </head>
 <body>
+<script>
+${getCustomComponentRuntimeScript()}
+<\/script>
+
 ${componentHtml}
+
 <script>
   function checkChoice(id) {
     const card = document.getElementById(id);
@@ -2413,6 +2535,7 @@ ${componentHtml}
     function clearAiDrafts() {
       aiDraftTemplates = [];
       renderAiDraftPreview();
+      saveAiDraftTemplates();
     }
 
     function addAiDraftToSidebar(index) {
@@ -2421,6 +2544,7 @@ ${componentHtml}
       registerAiComponentTemplate(template);
       aiDraftTemplates.splice(index, 1);
       renderAiDraftPreview();
+      saveAiDraftTemplates();
       setAiStatus("已添加到左侧组件栏。", "success");
     }
 
@@ -2430,21 +2554,29 @@ ${componentHtml}
       const count = aiDraftTemplates.length;
       aiDraftTemplates = [];
       renderAiDraftPreview();
+      saveAiDraftTemplates();
       setAiStatus(`已添加 ${count} 个组件到左侧组件栏。`, "success");
     }
 
     function removeAiDraft(index) {
       aiDraftTemplates.splice(index, 1);
       renderAiDraftPreview();
+      saveAiDraftTemplates();
     }
 
     async function sendAiChat() {
+      if (aiGenerationController) {
+        aiGenerationController.abort();
+        setAiStatus("正在停止生成请求。", "loading");
+        return;
+      }
+
       const input = document.getElementById("ai-chat-input");
       const userPrompt = input.value.trim();
       if (!userPrompt) return;
 
       if (looksLikeApiKey(userPrompt)) {
-        setAiStatus("当前输入看起来像 API Key。请把密钥填入左侧 API Key 字段，生成要求里只写组件需求。", "error");
+        setAiStatus("当前输入看起来像 API Key。请不要把密钥输入前端，密钥只写入本地代理 py 文件。", "error");
         return;
       }
 
@@ -2456,50 +2588,42 @@ ${componentHtml}
     }
 
     async function generateAiComponent(userPrompt) {
-      const apiUrl = document.getElementById("ai-api-url").value.trim();
-      const apiKey = document.getElementById("ai-api-key").value.trim();
+      const provider = document.getElementById("ai-provider").value;
+      const providerLabel = getAiProviderLabel(provider);
       const model = normalizeModelName(document.getElementById("ai-model").value.trim() || "MiniMax-M2.5");
       const button = document.getElementById("ai-send-btn");
 
-      if (!apiUrl) {
-        setAiStatus("请先填写接口 URL。", "error");
+      if (!provider) {
+        setAiStatus("请先选择大模型提供商。", "error");
         return;
       }
 
-      if (!apiKey) {
-        setAiStatus("请先填写 API Key。", "error");
+      if (!model) {
+        setAiStatus("请先选择模型。", "error");
         return;
       }
 
-      button.disabled = true;
-      button.textContent = "生成中";
-      setAiStatus("正在生成可拖拽组件模板，MiniMax 可能需要几十秒。", "");
+      button.disabled = false;
+      button.textContent = "停止生成";
+      const stopWaitingStatus = startAiWaitingStatus(providerLabel, model);
+      let assistantMessage = null;
 
-      let timeoutId = null;
       try {
-        const request = buildAiRequest(apiUrl, apiKey, model, userPrompt);
+        const request = buildAiRequest(provider, model, userPrompt, false);
         const controller = new AbortController();
-        timeoutId = window.setTimeout(() => controller.abort(), 90000);
-        const response = await fetch(request.url, {
-          method: "POST",
-          headers: request.headers,
-          body: JSON.stringify(request.body),
-          signal: controller.signal
-        });
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
+        aiGenerationController = controller;
+	        assistantMessage = {
+	          role: "assistant",
+	          content: "正在生成组件模板，后端会校验 JSON；如果解析失败，会要求模型重新生成。",
+	          streaming: true
+	        };
+        aiChatMessages.push(assistantMessage);
+        renderAiChat();
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          const modelHint = response.status === 422 && errorText.includes("Model Not Exist")
-            ? "。请确认模型名；SCNet MiniMax 默认应使用 MiniMax-M2.5 和 /api/llm/v1/chat/completions 接口。"
-            : "";
-          throw new Error(`接口返回 ${response.status}：${errorText.slice(0, 180)}${modelHint}`);
-        }
-
-        const result = await response.json();
+        const result = await fetchAiResponse(request, controller.signal);
         const content = extractAiContent(result);
-        const generated = normalizeAiGeneratedTemplates(parseAiJson(content));
+        const generated = normalizeAiGeneratedTemplates(parseAiJson(content))
+          .map(repairCanvasTemplate);
 
         if (!generated.length) {
           throw new Error("模型没有返回可用组件模板。");
@@ -2507,24 +2631,320 @@ ${componentHtml}
 
         aiDraftTemplates = generated;
         renderAiDraftPreview();
-        aiChatMessages.push({
-          role: "assistant",
-          content: `已生成 ${generated.length} 个组件模板，请在右侧预览后添加到左侧组件栏。`
-        });
+        saveAiDraftTemplates();
+        assistantMessage.content = `已生成 ${generated.length} 个组件模板，请在右侧预览后添加到左侧组件栏。`;
+        assistantMessage.streaming = false;
         renderAiChat();
         setAiStatus(`已生成 ${generated.length} 个组件模板。`, "success");
       } catch (error) {
         const message = error.name === "AbortError"
-          ? "生成超时。MiniMax 当前响应较慢，请稍后重试，或把生成要求写得更聚焦。"
+          ? "已停止生成。"
           : error.message;
-        aiChatMessages.push({ role: "assistant", content: `生成失败：${message}` });
+        if (!assistantMessage) {
+          assistantMessage = { role: "assistant", content: "", streaming: false };
+          aiChatMessages.push(assistantMessage);
+        }
+        assistantMessage.content = error.name === "AbortError" ? message : `生成失败：${message}`;
+        assistantMessage.streaming = false;
         renderAiChat();
-        setAiStatus(`生成失败：${message}`, "error");
+        setAiStatus(error.name === "AbortError" ? message : `生成失败：${message}`, error.name === "AbortError" ? "" : "error");
       } finally {
-        if (timeoutId) window.clearTimeout(timeoutId);
+        stopWaitingStatus();
+        aiGenerationController = null;
         button.disabled = false;
         button.textContent = "发送生成";
       }
+    }
+
+    async function fetchAiResponse(request, signal) {
+      const response = await fetch(request.url, {
+        method: "POST",
+        headers: request.headers,
+        body: JSON.stringify(request.body),
+        signal
+      });
+
+	      const text = await response.text();
+	      if (!response.ok) {
+	        let detail = text;
+	        try {
+	          detail = JSON.parse(text).error || text;
+	        } catch (error) {
+	          detail = text;
+	        }
+	        throw new Error(`接口返回 ${response.status}：${String(detail).slice(0, 180)}`);
+	      }
+
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        throw new Error(`本地代理返回的不是合法 JSON：${text.slice(0, 180)}`);
+      }
+    }
+
+    async function loadAiModelConfig() {
+      try {
+        const response = await fetch(localAiModelsUrl);
+        const config = await response.json();
+        if (!response.ok) throw new Error(config.error || `接口返回 ${response.status}`);
+        aiModelConfig = normalizePublicModelConfig(config);
+        renderAiModelSelectors();
+      } catch (error) {
+        if (!aiModelConfig.providers.length) {
+          aiModelConfig = normalizePublicModelConfig({
+            providers: [
+              {
+                id: "scnet",
+                name: "SCNet",
+                url: "/ai",
+                models: [{ id: "MiniMax-M2.5", label: "MiniMax-M2.5" }]
+              }
+            ]
+          });
+          renderAiModelSelectors();
+        }
+        setAiStatus(`模型配置加载失败：${error.message}`, "error");
+      }
+    }
+
+    function normalizePublicModelConfig(config) {
+      const providers = Array.isArray(config?.providers) ? config.providers : [];
+      return {
+        providers: providers
+          .map(provider => ({
+            id: String(provider.id || "").trim(),
+            name: String(provider.name || provider.id || "").trim(),
+            url: String(provider.url || "").trim(),
+            apiKeyConfigured: Boolean(provider.apiKeyConfigured),
+            models: Array.isArray(provider.models)
+              ? provider.models
+                  .map(model => ({
+                    id: String(model.id || model.value || "").trim(),
+                    label: String(model.label || model.id || model.value || "").trim()
+                  }))
+                  .filter(model => model.id)
+              : []
+          }))
+          .filter(provider => provider.id && provider.models.length)
+      };
+    }
+
+    function renderAiModelSelectors(preferredProvider, preferredModel) {
+      const providerSelect = document.getElementById("ai-provider");
+      const previousProvider = preferredProvider || providerSelect.value;
+      providerSelect.innerHTML = aiModelConfig.providers.map(provider => `
+        <option value="${escapeAttr(provider.id)}">${escapeHtml(provider.name)}</option>
+      `).join("");
+
+      if (previousProvider && aiModelConfig.providers.some(provider => provider.id === previousProvider)) {
+        providerSelect.value = previousProvider;
+      }
+
+      updateAiModelOptions(preferredModel);
+    }
+
+    function updateAiModelOptions(preferredModel) {
+      const provider = document.getElementById("ai-provider").value;
+      const modelSelect = document.getElementById("ai-model");
+      const providerConfig = getAiProviderConfig(provider) || aiModelConfig.providers[0];
+      const options = providerConfig?.models || [];
+
+      modelSelect.innerHTML = options.map(option => `
+        <option value="${escapeAttr(option.id)}">${escapeHtml(option.label)} (${escapeHtml(option.id)})</option>
+      `).join("");
+
+      if (preferredModel && options.some(option => option.id === preferredModel)) {
+        modelSelect.value = preferredModel;
+      }
+
+      fillModelManagerFromSelection();
+    }
+
+    function getAiProviderConfig(providerId) {
+      return aiModelConfig.providers.find(provider => provider.id === providerId);
+    }
+
+    function getAiProviderLabel(providerId) {
+      return getAiProviderConfig(providerId)?.name || providerId || "模型服务";
+    }
+
+    function fillModelManagerFromSelection() {
+      const provider = getAiProviderConfig(document.getElementById("ai-provider").value);
+      const modelId = document.getElementById("ai-model").value;
+      const model = provider?.models.find(item => item.id === modelId);
+
+      document.getElementById("model-provider-name").value = provider?.name || "";
+      document.getElementById("model-provider-url").value = provider?.url || "";
+      document.getElementById("model-api-key").value = "";
+      document.getElementById("model-name-input").value = model?.id || "";
+    }
+
+    async function saveModelConfigFromForm() {
+      const providerName = document.getElementById("model-provider-name").value.trim();
+      const url = document.getElementById("model-provider-url").value.trim();
+      const apiKey = document.getElementById("model-api-key").value.trim();
+      const modelId = document.getElementById("model-name-input").value.trim();
+
+      if (!providerName || !url || !apiKey || !modelId) {
+        setAiStatus("请填写提供商名称、URL、API Key 和模型名称。", "error");
+        return;
+      }
+
+      try {
+        const response = await fetch(localAiModelsUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            providerId: normalizeProviderId(providerName),
+            providerName,
+            url,
+            apiKey,
+            modelId,
+            modelLabel: modelId
+          })
+        });
+        const config = await response.json();
+        if (!response.ok) throw new Error(config.error || `接口返回 ${response.status}`);
+        aiModelConfig = normalizePublicModelConfig(config);
+        renderAiModelSelectors(normalizeProviderId(providerName), modelId);
+        document.getElementById("model-api-key").value = "";
+        setAiStatus("模型配置已保存到后端 model.config。", "success");
+      } catch (error) {
+        setAiStatus(`保存模型失败：${error.message}`, "error");
+      }
+    }
+
+    async function deleteSelectedModelConfig() {
+      const providerId = document.getElementById("ai-provider").value;
+      const modelId = document.getElementById("ai-model").value;
+      if (!providerId || !modelId) return;
+      if (!confirm(`确定删除当前模型配置：${modelId}？`)) return;
+
+      try {
+        const response = await fetch(`${localAiModelsUrl}/${encodeURIComponent(providerId)}/${encodeURIComponent(modelId)}`, {
+          method: "DELETE"
+        });
+        const config = await response.json();
+        if (!response.ok) throw new Error(config.error || `接口返回 ${response.status}`);
+        aiModelConfig = normalizePublicModelConfig(config);
+        renderAiModelSelectors();
+        setAiStatus("模型配置已删除。", "success");
+      } catch (error) {
+        setAiStatus(`删除模型失败：${error.message}`, "error");
+      }
+    }
+
+    function normalizeProviderId(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "custom-provider";
+    }
+
+    function startAiWaitingStatus(providerLabel, model) {
+      const startedAt = Date.now();
+      const phases = [
+        "正在连接本地代理",
+        "已提交到模型服务，等待首批内容",
+        "模型正在生成组件结构",
+        "正在等待完整 JSON 模板",
+        "大型模型响应较慢，请继续等待"
+      ];
+
+      const render = () => {
+        const seconds = Math.floor((Date.now() - startedAt) / 1000);
+        const phase = phases[Math.min(Math.floor(seconds / 15), phases.length - 1)];
+        setAiStatus(`${phase}。${providerLabel} / ${model} 已等待 ${seconds}s。`, "loading");
+      };
+
+      render();
+      const timer = window.setInterval(render, 1000);
+      return () => window.clearInterval(timer);
+    }
+
+    async function fetchAiStream(request, signal, onDelta) {
+      const response = await fetch(request.url, {
+        method: "POST",
+        headers: request.headers,
+        body: JSON.stringify(request.body),
+        signal
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`接口返回 ${response.status}：${errorText.slice(0, 180)}`);
+      }
+
+      if (!response.body) {
+        throw new Error("当前浏览器不支持流式读取响应。");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let content = "";
+      let receivedAnyEvent = false;
+
+      const consumeLine = line => {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) return false;
+
+        receivedAnyEvent = true;
+        const data = trimmed.slice(5).trim();
+        if (data === "[DONE]") return true;
+
+        let chunk = null;
+        try {
+          chunk = JSON.parse(data);
+        } catch (error) {
+          throw new Error(`流式事件解析失败：${data.slice(0, 160)}`);
+        }
+
+        if (chunk.error) throw new Error(chunk.error);
+        const delta = extractStreamDeltaContent(chunk);
+        if (!delta) return false;
+        content += delta;
+        if (typeof onDelta === "function") onDelta(delta);
+        return false;
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (consumeLine(line)) {
+            if (!content.trim()) throw new Error("流式响应中没有可解析的正文内容。");
+            return content;
+          }
+        }
+      }
+
+      buffer += decoder.decode();
+      if (buffer.trim() && consumeLine(buffer)) {
+        if (!content.trim()) throw new Error("流式响应中没有可解析的正文内容。");
+        return content;
+      }
+
+      if (!receivedAnyEvent) {
+        throw new Error("没有收到流式事件。");
+      }
+
+      if (!content.trim()) {
+        throw new Error("流式响应中没有可解析的正文内容。");
+      }
+
+      return content;
+    }
+
+    function extractStreamDeltaContent(chunk) {
+      const choice = chunk?.choices?.[0];
+      return choice?.delta?.content || choice?.message?.content || choice?.text || "";
     }
 
     function normalizeModelName(model) {
@@ -2536,114 +2956,45 @@ ${componentHtml}
       return normalized;
     }
 
-    function getAiSystemPrompt() {
-      return [
-        "你是教学交互组件模板生成器，目标是把用户的自然语言需求变成左侧组件栏里可拖拽复用的互动组件。",
-        "只能返回严格 JSON，不要返回 Markdown，不要解释。",
-        "JSON 必须是单个对象，所有 key 和字符串必须使用英文双引号。",
-        "不要在字符串中直接换行；不要使用中文引号；不要漏逗号；不要写注释。",
-        "你的任务不是生成正文里的实例，而是生成可放入左侧组件栏的可复用组件模板；用户之后会拖入正文。",
-        "优先理解用户要的交互流程、输入、按钮、反馈、随机性、状态展示和教学目标。",
-        "JSON 格式：{\"templates\":[{\"name\":\"组件名称\",\"description\":\"一句话说明\",\"baseType\":\"custom-interactive|choice-question|fill-blank|info-card|function-plot\",\"defaultConfig\":{...}}]}。",
-        "最多返回 2 个模板；除非用户明确要选择题、填空题、知识卡片或函数绘图，否则优先使用 custom-interactive。",
-        "custom-interactive defaultConfig 字段：title, summary, html, css, js。",
-        "custom-interactive 的 html 只写组件内部结构，不要写 script/style/html/body；css 尽量作用在组件内部 class 上；js 是函数体，会以 root 参数执行。",
-        "custom-interactive 的 js 必须使用 root.querySelector/root.querySelectorAll 查找元素，不要使用 document.querySelector；可以使用 document.createElement；不要请求网络；不要使用 alert；所有交互应在组件内即时反馈。",
-        "custom-interactive 必须是紧凑的正文内教学组件，不是整页网页；不要使用 body/html 样式、fixed/absolute 页面定位、超大留白或超过 420px 的固定高度。",
-        "custom-interactive 必须能直接运行，有完整默认状态，有清晰按钮、输入、结果区域、状态反馈和必要的重置/清空按钮。",
-        "核心交互必须使用 button、input、select、textarea 等语义控件；不要只让装饰性的 div 承担点击操作；按钮文字要清晰。",
-        "如果组件涉及随机、范围、数量、题目数量、时间、阈值或分类，应提供可编辑输入控件，并做输入校验和错误提示。",
-        "如果组件包含历史记录或列表，最多显示最近 10 条，并提供清空按钮，避免无限增长。",
-        "组件初始状态不得预先显示随机结果；必须等待用户操作后才显示结果。",
-        "CSS 必须让组件在 320px 到 700px 宽度内不横向滚动，控件文字不重叠；所有容器 max-width:100%，避免固定宽度超过父容器；按钮和输入应有清晰 hover/focus 状态。",
-        "组件拖入正文后应和前后段落贴合，外层留白控制在 12-18px，不能生成会把正文撑开的大画布或整屏容器。",
-        "class 名尽量使用组件相关前缀，避免影响页面其他内容。",
-        "比如抽小球组件应包含最大编号输入、明确的抽取按钮、当前结果、最近历史、清空历史和非法输入提示；历史最多保留 10 条。",
-        "baseType 决定这个自定义组件复用哪一种组件能力。",
-        "choice-question defaultConfig 字段：question, options(数组), answer, correctFeedback, wrongFeedback。",
-        "fill-blank defaultConfig 字段：question, answer, placeholder, correctFeedback, wrongFeedback。",
-        "info-card defaultConfig 字段：title, content。",
-        "function-plot defaultConfig 字段：title, expression, xMin, xMax, yMin, yMax。",
-        "模板内容必须适合当前教学页面，拖入正文后应能作为一个完整互动组件使用。"
-      ].join("\\n");
-    }
-
-    function getAiUserPrompt(userPrompt) {
+    function getAiChatContext() {
       const recentChat = aiChatMessages
         .slice(-8)
+        .filter(message => String(message.content || "").trim())
         .map(message => `${message.role === "user" ? "用户" : "助手"}：${redactSensitiveText(message.content)}`)
         .join("\\n");
 
-      return [
-        userPrompt || "请根据当前教学内容设计一个可复用的交互组件模板，加入左侧组件栏供用户拖拽使用。",
-        "",
-        "最近对话：",
-        recentChat || "无",
-        "",
-        "当前教学内容：",
-        getEditorPlainText()
-      ].join("\\n");
+      return recentChat || "无";
     }
 
-    function buildAiRequest(apiUrl, apiKey, model, userPrompt) {
-      const useAnthropic = /anthropic|\/messages\/?$/i.test(apiUrl);
-      const url = useAnthropic ? normalizeAnthropicMessagesUrl(apiUrl) : normalizeChatCompletionsUrl(apiUrl);
+    function buildAiRequest(provider, model, userPrompt, stream) {
       const headers = {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
+        "X-Provider": provider
       };
 
-      if (useAnthropic) {
-        return {
-          url,
-          headers,
-          body: {
-            model,
-            max_tokens: 2048,
-            temperature: 0.4,
-            system: getAiSystemPrompt(),
-            messages: [
-              { role: "user", content: getAiUserPrompt(userPrompt) }
-            ]
-          }
-        };
-      }
-
       return {
-        url,
+        url: stream ? localAiProxyStreamUrl : localAiProxyUrl,
         headers,
         body: {
           model,
-          max_tokens: 4096,
-          temperature: 0.4,
-          messages: [
-            { role: "system", content: getAiSystemPrompt() },
-            { role: "user", content: getAiUserPrompt(userPrompt) }
-          ]
+          max_tokens: 8192,
+          temperature: 0.2,
+          stream: Boolean(stream),
+          componentRequest: {
+            prompt: userPrompt || "请根据当前教学内容设计一个可复用的交互组件模板，加入左侧组件栏供用户拖拽使用。",
+            chatContext: getAiChatContext(),
+            editorText: getEditorPlainText()
+          }
         }
       };
     }
 
     function looksLikeApiKey(value) {
-      return /^sk-[A-Za-z0-9_\-=]{20,}$/.test(String(value).trim());
+      return /^(sk|nvapi)-[A-Za-z0-9_\-=]{20,}$/.test(String(value).trim());
     }
 
     function redactSensitiveText(value) {
-      return String(value).replace(/sk-[A-Za-z0-9_\-=]{20,}/g, "[API_KEY_REDACTED]");
-    }
-
-    function normalizeAnthropicMessagesUrl(url) {
-      const trimmed = url.replace(/\/+$/, "");
-      if (trimmed.endsWith("/messages")) return trimmed;
-      if (trimmed.includes("/anthropic/")) return `${trimmed}/messages`;
-      if (trimmed.includes("api.scnet.cn")) return "https://api.scnet.cn/api/llm/anthropic/v1/messages";
-      return trimmed;
-    }
-
-    function normalizeChatCompletionsUrl(url) {
-      const trimmed = url.replace(/\/+$/, "");
-      if (/^https?:\/\/(127\.0\.0\.1|localhost):8787\/ai$/i.test(trimmed)) return trimmed;
-      return trimmed.endsWith("/chat/completions") ? trimmed : `${trimmed}/chat/completions`;
+      return String(value).replace(/\b(?:sk|nvapi)-[A-Za-z0-9_\-=]{20,}/g, "[API_KEY_REDACTED]");
     }
 
     function extractAiContent(result) {
@@ -2802,12 +3153,54 @@ ${componentHtml}
       if (baseType === "custom-interactive") {
         merged.title = String(merged.title || defaults.title).slice(0, 40);
         merged.summary = String(merged.summary || merged.description || defaults.summary).slice(0, 140);
-        merged.html = String(merged.html || defaults.html).slice(0, 8000);
-        merged.css = String(merged.css || defaults.css).slice(0, 8000);
-        merged.js = String(merged.js || defaults.js).slice(0, 8000);
+        merged.html = getGeneratedCodeText(merged.html, merged.htmlLines, defaults.html).slice(0, 12000);
+        merged.css = getGeneratedCodeText(merged.css, merged.cssLines, defaults.css).slice(0, 12000);
+        merged.js = getGeneratedCodeText(merged.js, merged.jsLines, defaults.js).slice(0, 12000);
       }
 
       return merged;
+    }
+
+    function getGeneratedCodeText(value, lines, fallback) {
+      if (Array.isArray(lines)) {
+        const joined = lines
+          .map(line => typeof line === "string" ? line : String(line ?? ""))
+          .join("\n")
+          .trim();
+        if (joined) return joined;
+      }
+
+      if (Array.isArray(value)) {
+        const joined = value
+          .map(line => typeof line === "string" ? line : String(line ?? ""))
+          .join("\n")
+          .trim();
+        if (joined) return joined;
+      }
+
+      return String(value || fallback || "");
+    }
+
+    function repairCanvasTemplate(template) {
+      if (template.baseType !== "custom-interactive") return template;
+
+      const config = template.defaultConfig || {};
+      const html = String(config.html || "");
+      const js = String(config.js || "");
+      const css = String(config.css || "");
+      const signal = `${html}\n${js}\n${css}\n${template.name}\n${template.description}`;
+      const likelyCanvas = /getContext|canvas|requestAnimationFrame|rotate|perspective|3d|三维|视角|投影|坐标/i.test(signal);
+
+      if (likelyCanvas && !/<canvas[\s>]/i.test(html)) {
+        config.html = `<canvas class="ai-generated-canvas" width="560" height="340" aria-label="${escapeAttr(config.title || template.name || "交互画布")}"></canvas>\n${html}`;
+      }
+
+      if (likelyCanvas && !/ai-generated-canvas/.test(css)) {
+        config.css = `${css}\n.ai-generated-canvas { display: block; width: 100%; max-width: 640px; height: auto; min-height: 260px; border: 1px solid #d1d5db; border-radius: 10px; background: #ffffff; }`;
+      }
+
+      template.defaultConfig = config;
+      return template;
     }
 
     function normalizeFunctionExpression(expression) {
@@ -2839,8 +3232,10 @@ ${componentHtml}
       }
     }
 
-    function registerAiComponentTemplate(template) {
-      const type = "ai_" + Date.now() + "_" + (++aiTemplateCounter);
+    function registerAiComponentTemplate(template, options = {}) {
+      const shouldPersist = options.persist !== false;
+      const type = template.type || "ai_" + Date.now() + "_" + (++aiTemplateCounter);
+      template.type = type;
       const base = componentRegistry[template.baseType];
 
       componentRegistry[type] = {
@@ -2863,11 +3258,77 @@ ${componentHtml}
       item.draggable = true;
       item.dataset.type = type;
       item.innerHTML = `
-        <div class="component-name">${escapeHtml(template.name)}</div>
+        <div class="component-item-header">
+          <div class="component-name">${escapeHtml(template.name)}</div>
+          <button class="component-delete-btn" type="button" onclick="deleteAiComponentTemplate('${escapeAttr(type)}')">删除</button>
+        </div>
         <div class="component-desc">${escapeHtml(template.description)}</div>
       `;
       componentList.appendChild(item);
       bindComponentItemDrag(item);
+
+      if (shouldPersist) saveAiComponentTemplate(template);
+    }
+
+    function deleteAiComponentTemplate(type) {
+      const registry = componentRegistry[type];
+      if (!registry?.isAiTemplate) return;
+      if (!confirm(`确定删除生成组件“${registry.name}”？`)) return;
+
+      componentList.querySelectorAll(`.component-item[data-type="${CSS.escape(type)}"]`).forEach(item => item.remove());
+      const templates = loadSavedAiComponentTemplates().filter(item => item.type !== type);
+      localStorage.setItem(savedAiComponentsKey, JSON.stringify(templates));
+      setAiStatus("生成组件已从左侧组件栏删除。", "success");
+    }
+
+    function saveAiComponentTemplate(template) {
+      const templates = loadSavedAiComponentTemplates()
+        .filter(item => item.type !== template.type);
+      templates.push(template);
+      try {
+        localStorage.setItem(savedAiComponentsKey, JSON.stringify(templates));
+      } catch (error) {
+        setAiStatus("组件已添加，但浏览器本地存储失败，刷新后可能无法恢复。", "error");
+      }
+    }
+
+    function loadSavedAiComponentTemplates() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(savedAiComponentsKey) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function restoreSavedAiComponentTemplates() {
+      loadSavedAiComponentTemplates()
+        .filter(template => template?.type && template?.baseType && componentRegistry[template.baseType])
+        .forEach(template => {
+          if (!componentRegistry[template.type]) {
+            registerAiComponentTemplate(template, { persist: false });
+          }
+        });
+    }
+
+    function saveAiDraftTemplates() {
+      try {
+        localStorage.setItem(savedAiDraftsKey, JSON.stringify(aiDraftTemplates));
+      } catch (error) {
+        setAiStatus("生成结果已显示，但浏览器本地存储失败，刷新后可能无法恢复。", "error");
+      }
+    }
+
+    function restoreAiDraftTemplates() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(savedAiDraftsKey) || "[]");
+        aiDraftTemplates = Array.isArray(parsed)
+          ? parsed.filter(template => template?.baseType && componentRegistry[template.baseType])
+          : [];
+      } catch (error) {
+        aiDraftTemplates = [];
+      }
+      renderAiDraftPreview();
     }
 
     function selectTableCell(cell) {
@@ -3009,13 +3470,14 @@ ${componentHtml}
     }
 
     function renderCustomInteractiveExport(config, id) {
-      const html = sanitizeCustomHtml(config.html || "");
-      const css = sanitizeCustomStyle(config.css || "");
-      const js = String(config.js || "");
+      const normalized = normalizeCustomInteractiveConfig(config);
+      const html = sanitizeCustomHtml(normalized.html || "");
+      const css = sanitizeCustomStyle(normalized.css || "");
+      const js = String(normalized.js || "");
 
       return `
         <section class="interactive-card ai-custom-component" id="${id}">
-          <h3>${escapeHtml(config.title || "自定义交互组件")}</h3>
+          <h3>${escapeHtml(normalized.title || "自定义交互组件")}</h3>
           <div class="ai-custom-root">
             ${html}
           </div>
@@ -3028,28 +3490,336 @@ ${componentHtml}
             const root = document.getElementById("${escapeAttr(id)}")?.querySelector(".ai-custom-root");
             if (!root) return;
             try {
-              new Function("root", ${serializeScriptString(js)})(root);
+              const helpers = createCustomComponentHelpers(root);
+              new Function("scope", "with (scope) {\\n" + ${serializeScriptString(js)} + "\\n}")({
+                root,
+                helpers
+              });
+              window.setTimeout(() => helpers.ensureCanvasPreview(), 80);
             } catch (error) {
               const message = document.createElement("p");
               message.style.color = "#dc2626";
               message.textContent = "组件脚本运行失败：" + error.message;
               root.appendChild(message);
+              createCustomComponentHelpers(root).ensureCanvasPreview(error.message);
             }
           })();
         <\/script>
       `;
     }
 
+    function getCustomComponentRuntimeScript() {
+      return `
+        function createCustomComponentHelpers(root) {
+          const originalQuerySelector = root.querySelector.bind(root);
+
+          function ensureCanvas(target) {
+            let canvas = null;
+            if (typeof target === "string") {
+              canvas = originalQuerySelector(target);
+            } else if (target && target.tagName) {
+              canvas = target;
+            } else {
+              canvas = originalQuerySelector("canvas");
+            }
+
+            if (!canvas || String(canvas.tagName).toLowerCase() !== "canvas") {
+              canvas = document.createElement("canvas");
+              canvas.className = "ai-generated-canvas";
+              root.prepend(canvas);
+            }
+
+            const box = canvas.getBoundingClientRect();
+            const cssWidth = Number(canvas.dataset.width) || Math.max(320, Math.round(box.width || canvas.clientWidth || 520));
+            const cssHeight = Number(canvas.dataset.height) || Math.max(220, Math.round(box.height || canvas.clientHeight || 320));
+            if (!canvas.width) canvas.width = cssWidth;
+            if (!canvas.height) canvas.height = cssHeight;
+            canvas.style.maxWidth = "100%";
+            if (!canvas.style.display) canvas.style.display = "block";
+            return canvas;
+          }
+
+          function canvasLooksBlank(canvas) {
+            const context = canvas.getContext("2d");
+            if (!context || !canvas.width || !canvas.height) return true;
+
+            let data = null;
+            try {
+              data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+            } catch (error) {
+              return false;
+            }
+
+            const step = Math.max(4, Math.floor(data.length / 12000 / 4) * 4);
+            let meaningful = 0;
+            const requiredMeaningfulPixels = Math.max(60, Math.floor((canvas.width + canvas.height) / 8));
+            for (let i = 0; i < data.length; i += step) {
+              const alpha = data[i + 3];
+              if (!alpha) continue;
+              const red = data[i];
+              const green = data[i + 1];
+              const blue = data[i + 2];
+              const contrast = Math.max(red, green, blue) - Math.min(red, green, blue);
+              if (red < 210 || green < 210 || blue < 210 || contrast > 35) meaningful += 1;
+              if (meaningful > requiredMeaningfulPixels) return false;
+            }
+            return true;
+          }
+
+          function drawArrow(ctx, from, to, color, label) {
+            const angle = Math.atan2(to.y - from.y, to.x - from.x);
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(from.x, from.y);
+            ctx.lineTo(to.x, to.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(to.x, to.y);
+            ctx.lineTo(to.x - 10 * Math.cos(angle - Math.PI / 6), to.y - 10 * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(to.x - 10 * Math.cos(angle + Math.PI / 6), to.y - 10 * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+            if (label) {
+              ctx.font = "13px sans-serif";
+              ctx.fillText(label, to.x + 6, to.y - 6);
+            }
+            ctx.restore();
+          }
+
+          function drawFallbackCanvas(canvas, reason) {
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+
+            const width = canvas.width || 560;
+            const height = canvas.height || 340;
+            canvas.width = width;
+            canvas.height = height;
+
+            const text = root.innerText || "";
+            const ranges = Array.from(root.querySelectorAll("input[type='range']"));
+            const angle = Number(ranges[0]?.value || 35);
+            const offset = Number(ranges[1]?.value || 25);
+            const isConic = /圆锥|圆锥曲线|椭圆|双曲线|抛物线|conic|cone/i.test(text);
+            const isVector = /向量|平面|夹角|三维|坐标|vector|plane|3d/i.test(text);
+
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.strokeStyle = "#eef2f7";
+            ctx.lineWidth = 1;
+            for (let x = 20; x < width; x += 28) {
+              ctx.beginPath();
+              ctx.moveTo(x, 0);
+              ctx.lineTo(x, height);
+              ctx.stroke();
+            }
+            for (let y = 20; y < height; y += 28) {
+              ctx.beginPath();
+              ctx.moveTo(0, y);
+              ctx.lineTo(width, y);
+              ctx.stroke();
+            }
+
+            const center = { x: width * 0.48, y: height * 0.58 };
+            drawArrow(ctx, center, { x: center.x + width * 0.32, y: center.y + 6 }, "#2563eb", "x");
+            drawArrow(ctx, center, { x: center.x - width * 0.2, y: center.y + height * 0.18 }, "#16a34a", "y");
+            drawArrow(ctx, center, { x: center.x, y: center.y - height * 0.36 }, "#dc2626", "z");
+
+            if (isConic) {
+              const top = { x: center.x, y: height * 0.16 };
+              const baseY = height * 0.82;
+              const radius = Math.min(width * 0.26, 120);
+              ctx.save();
+              const coneGradient = ctx.createLinearGradient(center.x - radius, top.y, center.x + radius, baseY);
+              coneGradient.addColorStop(0, "rgba(59, 130, 246, 0.12)");
+              coneGradient.addColorStop(1, "rgba(37, 99, 235, 0.28)");
+              ctx.fillStyle = coneGradient;
+              ctx.strokeStyle = "#3b82f6";
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(top.x, top.y);
+              ctx.lineTo(center.x - radius, baseY);
+              ctx.ellipse(center.x, baseY, radius, radius * 0.28, 0, Math.PI, 0, true);
+              ctx.lineTo(top.x, top.y);
+              ctx.fill();
+              ctx.stroke();
+              ctx.setLineDash([5, 5]);
+              ctx.beginPath();
+              ctx.ellipse(center.x, baseY, radius, radius * 0.28, 0, 0, Math.PI);
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              const planeY = center.y + offset * 0.45;
+              const tilt = (angle - 45) * 0.55;
+              ctx.fillStyle = "rgba(245, 158, 11, 0.22)";
+              ctx.strokeStyle = "#f59e0b";
+              ctx.beginPath();
+              ctx.moveTo(center.x - radius * 1.1, planeY + tilt);
+              ctx.lineTo(center.x + radius * 1.1, planeY - tilt);
+              ctx.lineTo(center.x + radius * 0.78, planeY + 38 - tilt);
+              ctx.lineTo(center.x - radius * 1.42, planeY + 38 + tilt);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+
+              ctx.strokeStyle = "#7c3aed";
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.ellipse(center.x, planeY + 18, radius * 0.62, Math.max(18, 34 - Math.abs(angle - 45) * 0.22), -tilt * Math.PI / 180, 0, Math.PI * 2);
+              ctx.stroke();
+
+              ctx.fillStyle = "#334155";
+              ctx.font = "14px sans-serif";
+              ctx.fillText("平面截圆锥形成圆锥曲线", 16, height - 18);
+              ctx.restore();
+            } else if (isVector) {
+              ctx.save();
+              ctx.fillStyle = "rgba(37, 99, 235, 0.12)";
+              ctx.strokeStyle = "#2563eb";
+              ctx.beginPath();
+              ctx.moveTo(center.x - 130, center.y + 64);
+              ctx.lineTo(center.x + 132, center.y + 38);
+              ctx.lineTo(center.x + 92, center.y - 34);
+              ctx.lineTo(center.x - 160, center.y - 10);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+              drawArrow(ctx, center, { x: center.x + 106, y: center.y - 82 }, "#7c3aed", "v");
+              drawArrow(ctx, center, { x: center.x + 116, y: center.y + 20 }, "#f97316", "投影");
+              ctx.fillStyle = "#334155";
+              ctx.font = "14px sans-serif";
+              ctx.fillText("三维向量与平面关系示意", 16, height - 18);
+              ctx.restore();
+            } else {
+              ctx.save();
+              ctx.fillStyle = "#334155";
+              ctx.font = "15px sans-serif";
+              ctx.fillText("AI 组件画布预览", 18, 28);
+              ctx.font = "13px sans-serif";
+              ctx.fillStyle = "#64748b";
+              ctx.fillText(reason ? "生成脚本未绘制内容，已显示预览占位图。" : "等待组件脚本绘制内容。", 18, 50);
+              ctx.restore();
+            }
+
+            canvas.dataset.aiFallbackDrawn = "true";
+          }
+
+          function ensureCanvasPreview(reason) {
+            const text = root.innerText || "";
+            const mustShowSpatialPreview = /圆锥|圆锥曲线|椭圆|双曲线|抛物线|三维|向量|平面|夹角|坐标|conic|cone|vector|plane|3d/i.test(text);
+            const canvases = Array.from(root.querySelectorAll("canvas"));
+            if (!canvases.length && /canvas|三维|圆锥|向量|平面|坐标/i.test(text)) {
+              canvases.push(ensureCanvas("canvas"));
+            }
+
+            const visibleCanvases = canvases.map(canvas => {
+              ensureCanvas(canvas);
+              if (!mustShowSpatialPreview) return canvas;
+
+              let fallbackCanvas = canvas.nextElementSibling;
+              if (!fallbackCanvas || !fallbackCanvas.classList?.contains("ai-runtime-fallback-canvas")) {
+                fallbackCanvas = document.createElement("canvas");
+                fallbackCanvas.className = (canvas.className || "ai-generated-canvas") + " ai-runtime-fallback-canvas";
+                fallbackCanvas.width = canvas.width || 560;
+                fallbackCanvas.height = canvas.height || 340;
+                fallbackCanvas.style.cssText = canvas.style.cssText;
+                fallbackCanvas.style.display = "block";
+                fallbackCanvas.style.maxWidth = "100%";
+                fallbackCanvas.style.background = "#ffffff";
+                canvas.insertAdjacentElement("afterend", fallbackCanvas);
+              }
+              canvas.style.display = "none";
+              return fallbackCanvas;
+            });
+
+            visibleCanvases.forEach(canvas => {
+              ensureCanvas(canvas);
+              if (mustShowSpatialPreview || canvasLooksBlank(canvas)) drawFallbackCanvas(canvas, reason);
+            });
+
+            root.querySelectorAll("input[type='range']").forEach(input => {
+              if (input.dataset.aiCanvasFallbackBound) return;
+              input.dataset.aiCanvasFallbackBound = "true";
+              input.addEventListener("input", () => {
+                visibleCanvases.forEach(canvas => {
+                  if (canvas.dataset.aiFallbackDrawn || canvasLooksBlank(canvas)) drawFallbackCanvas(canvas);
+                });
+              });
+            });
+          }
+
+          const helpers = {
+            canvas(selector) {
+              return ensureCanvas(selector);
+            },
+            context2d(selector) {
+              const canvas = ensureCanvas(selector);
+              const context = canvas.getContext("2d");
+              if (!context) throw new Error("当前浏览器无法创建 2D canvas 上下文");
+              return { canvas, context };
+            }
+          };
+
+          root.querySelector = function(selector) {
+            const element = originalQuerySelector(selector);
+            if (selector && String(selector).includes("canvas") && (!element || String(element.tagName).toLowerCase() !== "canvas")) {
+              return ensureCanvas(selector);
+            }
+            return element;
+          };
+
+          root.getContext = function(type) {
+            return helpers.canvas().getContext(type);
+          };
+
+          return {
+            canvas: helpers.canvas,
+            context2d: helpers.context2d,
+            ensureCanvasPreview
+          };
+        }
+      `;
+    }
+
     function sanitizeCustomHtml(html) {
       return String(html)
         .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-        .replace(/<\/(style|textarea|title)>/gi, match => match.replace("</", "<\\/"));
+        .replace(/<style\b[^>]*>[\s\S]*?(?:<\/style>|<\\\/style>)/gi, "");
     }
 
     function sanitizeCustomStyle(css) {
       return String(css)
         .replace(/<\/style/gi, "<\\/style")
         .replace(/<script/gi, "&lt;script");
+    }
+
+    function normalizeCustomInteractiveConfig(config) {
+      const normalized = {
+        title: config?.title || "",
+        summary: config?.summary || "",
+        html: String(config?.html || ""),
+        css: String(config?.css || ""),
+        js: String(config?.js || "")
+      };
+      const extractedStyles = [];
+
+      normalized.html = normalized.html.replace(/<style\b[^>]*>([\s\S]*?)(?:<\/style>|<\\\/style>)/gi, (_, css) => {
+        extractedStyles.push(css.trim());
+        return "";
+      });
+
+      if (extractedStyles.length) {
+        normalized.css = [normalized.css, ...extractedStyles]
+          .map(part => String(part || "").trim())
+          .filter(Boolean)
+          .join("\n");
+      }
+
+      return normalized;
     }
 
     function serializeScriptString(js) {
@@ -3257,6 +4027,10 @@ ${componentHtml}
   </style>
 </head>
 <body>
+<script>
+${getCustomComponentRuntimeScript()}
+<\/script>
+
 ${finalBody}
 
 <script>
@@ -3472,6 +4246,9 @@ ${finalBody}
       return escapeHtml(value);
     }
 
+    loadAiModelConfig();
+    restoreSavedAiComponentTemplates();
+    restoreAiDraftTemplates();
     updateDropHint();
   </script>
 </body>
