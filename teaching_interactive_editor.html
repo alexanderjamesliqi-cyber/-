@@ -3539,12 +3539,7 @@ ${componentHtml}
             const root = document.getElementById("${escapeAttr(id)}")?.querySelector(".ai-custom-root");
             if (!root) return;
             try {
-              const helpers = createCustomComponentHelpers(root);
-              new Function("scope", "with (scope) {\\n" + ${serializeScriptString(js)} + "\\n}")({
-                root,
-                helpers
-              });
-              window.setTimeout(() => helpers.ensureCanvasPreview(), 80);
+              runCustomComponentScript(root, ${serializeScriptString(js)});
             } catch (error) {
               const message = document.createElement("p");
               message.style.color = "#dc2626";
@@ -3559,6 +3554,71 @@ ${componentHtml}
 
     function getCustomComponentRuntimeScript() {
       return `
+        function normalizeGeneratedComponentScript(js) {
+          let code = String(js || "").trim();
+          code = code
+            .replace(/^\\s*\`\`\`(?:javascript|js)?\\s*/i, "")
+            .replace(/\\s*\`\`\`\\s*$/i, "")
+            .replace(/<script\\b[^>]*>/gi, "")
+            .replace(/<\\\/script>/gi, "")
+            .trim();
+
+          code = code
+            .replace(/\\bdocument\\.querySelectorAll\\s*\\(/g, "root.querySelectorAll(")
+            .replace(/\\bdocument\\.querySelector\\s*\\(/g, "root.querySelector(")
+            .replace(/\\bdocument\\.getElementById\\s*\\([^)]*\\)\\s*\\.querySelectorAll\\s*\\(/g, "root.querySelectorAll(")
+            .replace(/\\bdocument\\.getElementById\\s*\\([^)]*\\)\\s*\\.querySelector\\s*\\(/g, "root.querySelector(");
+
+          code = code
+            .replace(/^\\s*(?:const|let|var)\\s+root\\s*=\\s*(?:document|window\\.document)[^;\\n]*(?:;|\\n)/gm, "")
+            .replace(/^\\s*(?:const|let|var)\\s+root\\s*=\\s*[^;\\n]*querySelector[^;\\n]*(?:;|\\n)/gm, "")
+            .replace(/^\\s*function\\s+root\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?^\\s*\\}\\s*/gm, "");
+
+          const iifeMatch = code.match(/^\\s*\\(\\s*function\\s*\\(([^)]*)\\)\\s*\\{([\\s\\S]*)\\}\\s*\\)\\s*\\(([^)]*)\\)\\s*;?\\s*$/);
+          if (iifeMatch && /\\broot\\b/.test(iifeMatch[1])) {
+            code = iifeMatch[2].trim();
+          }
+
+          return code;
+        }
+
+        function shouldUseCanvasCompatibility(root, code) {
+          const signal = [root?.innerText || "", code || ""].join("\\n");
+          return /canvas|getContext|requestAnimationFrame|三维|视角|坐标|圆锥|圆锥曲线|椭圆|双曲线|抛物线|vector|plane|3d|conic|cone/i.test(signal);
+        }
+
+        function executeGeneratedComponentCode(root, helpers, code) {
+          let canvas = null;
+          let ctx = null;
+          if (/\\bcanvas\\b|\\bctx\\b|getContext|requestAnimationFrame/i.test(code)) {
+            const contextInfo = helpers.context2d("canvas");
+            canvas = contextInfo.canvas;
+            ctx = contextInfo.context;
+          }
+          return new Function("root", "helpers", "canvas", "ctx", '"use strict";\\n' + code)(root, helpers, canvas, ctx);
+        }
+
+        function runCustomComponentScript(root, js) {
+          if (!root || typeof root.querySelector !== "function") {
+            throw new Error("组件根节点无效，无法运行脚本。");
+          }
+
+          const helpers = createCustomComponentHelpers(root);
+          const normalized = normalizeGeneratedComponentScript(js);
+
+          try {
+            executeGeneratedComponentCode(root, helpers, normalized);
+            window.setTimeout(() => helpers.ensureCanvasPreview(), 80);
+            return;
+          } catch (error) {
+            if (shouldUseCanvasCompatibility(root, normalized)) {
+              helpers.ensureCanvasPreview(error.message);
+              return;
+            }
+            throw error;
+          }
+        }
+
         function createCustomComponentHelpers(root) {
           const originalQuerySelector = root.querySelector.bind(root);
 
