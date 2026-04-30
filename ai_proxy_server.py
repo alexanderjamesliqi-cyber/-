@@ -47,6 +47,22 @@ DEFAULT_MODEL_CONFIG = {
                 {"id": "meta/llama-3.3-70b-instruct", "label": "meta/llama-3.3-70b-instruct"},
             ],
         },
+        {
+            "id": "google",
+            "name": "Google Gemini",
+            "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            "apiKey": os.environ.get("GOOGLE_API_KEY", "PASTE_GOOGLE_API_KEY"),
+            "models": [
+                {"id": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro Preview"},
+                {"id": "gemini-3.1-flash", "label": "Gemini 3.1 Flash"},
+                {"id": "gemini-3.1-flash-lite-preview", "label": "Gemini 3.1 Flash-Lite Preview"},
+                {"id": "gemini-3-pro-preview", "label": "Gemini 3 Pro Preview"},
+                {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
+                {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+                {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash-Lite"},
+                {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
+            ],
+        },
     ]
 }
 
