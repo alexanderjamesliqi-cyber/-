@@ -393,6 +393,15 @@
       resize: vertical;
     }
 
+    .ai-chat-actions {
+      display: grid;
+      gap: 8px;
+    }
+
+    .ai-chat-actions button {
+      min-width: 96px;
+    }
+
     .ai-preview-list {
       display: grid;
       gap: 10px;
@@ -1195,7 +1204,10 @@
           <div id="ai-chat-log" class="ai-chat-log"></div>
           <div class="ai-chat-input-row">
             <textarea id="ai-chat-input" placeholder="描述你想生成的组件，例如：生成一个正弦函数定义演示组件，能展示图像并让学生判断周期。"></textarea>
-            <button id="ai-send-btn" class="primary-btn" onclick="sendAiChat()">发送生成</button>
+            <div class="ai-chat-actions">
+              <button id="ai-send-btn" class="primary-btn" onclick="sendAiChat()">发送生成</button>
+              <button type="button" onclick="clearAiChat()">清除对话</button>
+            </div>
           </div>
         </div>
 
@@ -2348,6 +2360,22 @@
       aiChatLog.scrollTop = aiChatLog.scrollHeight;
     }
 
+    function clearAiChat() {
+      if (aiGenerationController) {
+        aiGenerationController.abort();
+      }
+      aiGenerationController = null;
+      aiActiveAssistantMessage = null;
+      aiChatMessages = [{
+        role: "assistant",
+        content: "描述你想要的组件。我会先生成可预览的组件模板，确认后再加入左侧组件栏。"
+      }];
+      document.getElementById("ai-chat-input").value = "";
+      document.getElementById("ai-send-btn").disabled = false;
+      document.getElementById("ai-send-btn").textContent = "发送生成";
+      renderAiChat();
+    }
+
     function renderAiDraftPreview() {
       if (!aiDraftTemplates.length) {
         aiPreviewList.innerHTML = `<div class="help-text">还没有可预览的组件。</div>`;
@@ -2629,7 +2657,6 @@ ${componentHtml}
         stopWaitingStatus = startAiWaitingStatus(providerLabel, model, assistantMessage, receiveStats);
 
         let content = "";
-        let usedFallbackRequest = false;
         try {
           content = await fetchAiStream(request, controller.signal, delta => {
             receiveStats.receivedChars += delta.length;
@@ -2637,44 +2664,16 @@ ${componentHtml}
           });
         } catch (streamError) {
           if (streamError.name === "AbortError") throw streamError;
-          usedFallbackRequest = true;
-          assistantMessage.content = [
-            "流式接收失败，正在切换到完整响应校验。",
-            `原因：${streamError.message}`,
-            `已接收：${receiveStats.receivedChars} 个字符`
-          ].join("\n");
-          renderAiChat();
-          const fallbackRequest = buildAiRequest(provider, model, userPrompt, false);
-          const result = await fetchAiResponse(fallbackRequest, controller.signal, chars => {
-            receiveStats.receivedChars = chars;
-            if (typeof receiveStats.render === "function") receiveStats.render();
-          });
-          content = extractAiContent(result);
+          throw new Error(`流式接收失败：${streamError.message}`);
         }
         stopWaitingStatus();
         stopWaitingStatus = () => {};
         receiveStats.receivedChars = content.length;
-        let generated = [];
+        const generated = [];
         try {
-          generated = normalizeAiGeneratedTemplates(parseAiJson(content))
-            .map(repairCanvasTemplate);
+          generated.push(...normalizeAiGeneratedTemplates(parseAiJson(content)));
         } catch (parseError) {
-          if (usedFallbackRequest) throw parseError;
-          assistantMessage.content = [
-            "流式内容已接收，但 JSON 校验失败，正在请求后端重新生成。",
-            `已接收：${receiveStats.receivedChars} 个字符`
-          ].join("\n");
-          renderAiChat();
-          usedFallbackRequest = true;
-          const fallbackRequest = buildAiRequest(provider, model, userPrompt, false);
-          const result = await fetchAiResponse(fallbackRequest, controller.signal, chars => {
-            receiveStats.receivedChars = chars;
-            if (typeof receiveStats.render === "function") receiveStats.render();
-          });
-          content = extractAiContent(result);
-          receiveStats.receivedChars = content.length;
-          generated = normalizeAiGeneratedTemplates(parseAiJson(content))
-            .map(repairCanvasTemplate);
+          throw new Error(`组件 JSON 解析失败：${parseError.message}`);
         }
 
         if (!generated.length) {
@@ -3248,7 +3247,7 @@ ${componentHtml}
       return merged;
     }
 
-    function getGeneratedCodeText(value, lines, fallback) {
+    function getGeneratedCodeText(value, lines, defaultValue) {
       if (Array.isArray(lines)) {
         const joined = lines
           .map(line => typeof line === "string" ? line : String(line ?? ""))
@@ -3265,29 +3264,7 @@ ${componentHtml}
         if (joined) return joined;
       }
 
-      return String(value || fallback || "");
-    }
-
-    function repairCanvasTemplate(template) {
-      if (template.baseType !== "custom-interactive") return template;
-
-      const config = template.defaultConfig || {};
-      const html = String(config.html || "");
-      const js = String(config.js || "");
-      const css = String(config.css || "");
-      const signal = `${html}\n${js}\n${css}\n${template.name}\n${template.description}`;
-      const likelyCanvas = /getContext|canvas|requestAnimationFrame|rotate|perspective|3d|三维|视角|投影|坐标/i.test(signal);
-
-      if (likelyCanvas && !/<canvas[\s>]/i.test(html)) {
-        config.html = `<canvas class="ai-generated-canvas" width="560" height="340" aria-label="${escapeAttr(config.title || template.name || "交互画布")}"></canvas>\n${html}`;
-      }
-
-      if (likelyCanvas && !/ai-generated-canvas/.test(css)) {
-        config.css = `${css}\n.ai-generated-canvas { display: block; width: 100%; max-width: 640px; height: auto; min-height: 260px; border: 1px solid #d1d5db; border-radius: 10px; background: #ffffff; }`;
-      }
-
-      template.defaultConfig = config;
-      return template;
+      return String(value || defaultValue || "");
     }
 
     function normalizeFunctionExpression(expression) {
@@ -3300,22 +3277,22 @@ ${componentHtml}
       return value || "x";
     }
 
-    function parseAiNumber(value, fallback) {
+    function parseAiNumber(value, defaultValue) {
       if (Number.isFinite(Number(value))) return Number(value);
       const text = String(value ?? "").trim();
-      if (!text) return fallback;
+      if (!text) return defaultValue;
       const normalized = text
         .replaceAll("π", "PI")
         .replace(/(?<=\d)PI/g, "*PI")
         .replace(/PI(?=\d)/g, "PI*");
 
-      if (!/^[0-9+\-*/().\sPI]+$/.test(normalized)) return fallback;
+      if (!/^[0-9+\-*/().\sPI]+$/.test(normalized)) return defaultValue;
 
       try {
         const result = Function("PI", `"use strict"; return (${normalized});`)(Math.PI);
-        return Number.isFinite(result) ? result : fallback;
+        return Number.isFinite(result) ? result : defaultValue;
       } catch (error) {
-        return fallback;
+        return defaultValue;
       }
     }
 
@@ -3583,7 +3560,6 @@ ${componentHtml}
               message.style.color = "#dc2626";
               message.textContent = "组件脚本运行失败：" + error.message;
               root.appendChild(message);
-              createCustomComponentHelpers(root).ensureCanvasPreview(error.message);
             }
           })();
         <\/script>
@@ -3620,20 +3596,8 @@ ${componentHtml}
           return code;
         }
 
-        function shouldUseCanvasCompatibility(root, code) {
-          const signal = [root?.innerText || "", code || ""].join("\\n");
-          return /canvas|getContext|requestAnimationFrame|三维|视角|坐标|圆锥|圆锥曲线|椭圆|双曲线|抛物线|vector|plane|3d|conic|cone/i.test(signal);
-        }
-
         function executeGeneratedComponentCode(root, helpers, code) {
-          let canvas = null;
-          let ctx = null;
-          if (/\\bcanvas\\b|\\bctx\\b|getContext|requestAnimationFrame/i.test(code)) {
-            const contextInfo = helpers.context2d("canvas");
-            canvas = contextInfo.canvas;
-            ctx = contextInfo.context;
-          }
-          return new Function("root", "helpers", "canvas", "ctx", '"use strict";\\n' + code)(root, helpers, canvas, ctx);
+          return new Function("root", "helpers", '"use strict";\\n' + code)(root, helpers);
         }
 
         function runCustomComponentScript(root, js) {
@@ -3643,18 +3607,7 @@ ${componentHtml}
 
           const helpers = createCustomComponentHelpers(root);
           const normalized = normalizeGeneratedComponentScript(js);
-
-          try {
-            executeGeneratedComponentCode(root, helpers, normalized);
-            window.setTimeout(() => helpers.ensureCanvasPreview(), 80);
-            return;
-          } catch (error) {
-            if (shouldUseCanvasCompatibility(root, normalized)) {
-              helpers.ensureCanvasPreview(error.message);
-              return;
-            }
-            throw error;
-          }
+          executeGeneratedComponentCode(root, helpers, normalized);
         }
 
         function createCustomComponentHelpers(root) {
@@ -3670,10 +3623,12 @@ ${componentHtml}
               canvas = originalQuerySelector("canvas");
             }
 
-            if (!canvas || String(canvas.tagName).toLowerCase() !== "canvas") {
-              canvas = document.createElement("canvas");
-              canvas.className = "ai-generated-canvas";
-              root.prepend(canvas);
+            if (!canvas) {
+              throw new Error("组件 HTML 中没有找到 canvas 元素。");
+            }
+
+            if (String(canvas.tagName).toLowerCase() !== "canvas") {
+              throw new Error("选择器匹配到的不是 canvas 元素。");
             }
 
             const box = canvas.getBoundingClientRect();
@@ -3684,219 +3639,6 @@ ${componentHtml}
             canvas.style.maxWidth = "100%";
             if (!canvas.style.display) canvas.style.display = "block";
             return canvas;
-          }
-
-          function canvasLooksBlank(canvas) {
-            const context = canvas.getContext("2d");
-            if (!context || !canvas.width || !canvas.height) return true;
-
-            let data = null;
-            try {
-              data = context.getImageData(0, 0, canvas.width, canvas.height).data;
-            } catch (error) {
-              return false;
-            }
-
-            const step = Math.max(4, Math.floor(data.length / 12000 / 4) * 4);
-            let meaningful = 0;
-            const requiredMeaningfulPixels = Math.max(60, Math.floor((canvas.width + canvas.height) / 8));
-            for (let i = 0; i < data.length; i += step) {
-              const alpha = data[i + 3];
-              if (!alpha) continue;
-              const red = data[i];
-              const green = data[i + 1];
-              const blue = data[i + 2];
-              const contrast = Math.max(red, green, blue) - Math.min(red, green, blue);
-              if (red < 210 || green < 210 || blue < 210 || contrast > 35) meaningful += 1;
-              if (meaningful > requiredMeaningfulPixels) return false;
-            }
-            return true;
-          }
-
-          function drawArrow(ctx, from, to, color, label) {
-            const angle = Math.atan2(to.y - from.y, to.x - from.x);
-            ctx.save();
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(from.x, from.y);
-            ctx.lineTo(to.x, to.y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(to.x, to.y);
-            ctx.lineTo(to.x - 10 * Math.cos(angle - Math.PI / 6), to.y - 10 * Math.sin(angle - Math.PI / 6));
-            ctx.lineTo(to.x - 10 * Math.cos(angle + Math.PI / 6), to.y - 10 * Math.sin(angle + Math.PI / 6));
-            ctx.closePath();
-            ctx.fill();
-            if (label) {
-              ctx.font = "13px sans-serif";
-              ctx.fillText(label, to.x + 6, to.y - 6);
-            }
-            ctx.restore();
-          }
-
-          function drawFallbackCanvas(canvas, reason) {
-            const ctx = canvas.getContext("2d");
-            if (!ctx) return;
-
-            const width = canvas.width || 560;
-            const height = canvas.height || 340;
-            canvas.width = width;
-            canvas.height = height;
-
-            const text = root.innerText || "";
-            const ranges = Array.from(root.querySelectorAll("input[type='range']"));
-            const angle = Number(ranges[0]?.value || 35);
-            const offset = Number(ranges[1]?.value || 25);
-            const isConic = /圆锥|圆锥曲线|椭圆|双曲线|抛物线|conic|cone/i.test(text);
-            const isVector = /向量|平面|夹角|三维|坐标|vector|plane|3d/i.test(text);
-
-            ctx.clearRect(0, 0, width, height);
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, width, height);
-
-            ctx.strokeStyle = "#eef2f7";
-            ctx.lineWidth = 1;
-            for (let x = 20; x < width; x += 28) {
-              ctx.beginPath();
-              ctx.moveTo(x, 0);
-              ctx.lineTo(x, height);
-              ctx.stroke();
-            }
-            for (let y = 20; y < height; y += 28) {
-              ctx.beginPath();
-              ctx.moveTo(0, y);
-              ctx.lineTo(width, y);
-              ctx.stroke();
-            }
-
-            const center = { x: width * 0.48, y: height * 0.58 };
-            drawArrow(ctx, center, { x: center.x + width * 0.32, y: center.y + 6 }, "#2563eb", "x");
-            drawArrow(ctx, center, { x: center.x - width * 0.2, y: center.y + height * 0.18 }, "#16a34a", "y");
-            drawArrow(ctx, center, { x: center.x, y: center.y - height * 0.36 }, "#dc2626", "z");
-
-            if (isConic) {
-              const top = { x: center.x, y: height * 0.16 };
-              const baseY = height * 0.82;
-              const radius = Math.min(width * 0.26, 120);
-              ctx.save();
-              const coneGradient = ctx.createLinearGradient(center.x - radius, top.y, center.x + radius, baseY);
-              coneGradient.addColorStop(0, "rgba(59, 130, 246, 0.12)");
-              coneGradient.addColorStop(1, "rgba(37, 99, 235, 0.28)");
-              ctx.fillStyle = coneGradient;
-              ctx.strokeStyle = "#3b82f6";
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.moveTo(top.x, top.y);
-              ctx.lineTo(center.x - radius, baseY);
-              ctx.ellipse(center.x, baseY, radius, radius * 0.28, 0, Math.PI, 0, true);
-              ctx.lineTo(top.x, top.y);
-              ctx.fill();
-              ctx.stroke();
-              ctx.setLineDash([5, 5]);
-              ctx.beginPath();
-              ctx.ellipse(center.x, baseY, radius, radius * 0.28, 0, 0, Math.PI);
-              ctx.stroke();
-              ctx.setLineDash([]);
-
-              const planeY = center.y + offset * 0.45;
-              const tilt = (angle - 45) * 0.55;
-              ctx.fillStyle = "rgba(245, 158, 11, 0.22)";
-              ctx.strokeStyle = "#f59e0b";
-              ctx.beginPath();
-              ctx.moveTo(center.x - radius * 1.1, planeY + tilt);
-              ctx.lineTo(center.x + radius * 1.1, planeY - tilt);
-              ctx.lineTo(center.x + radius * 0.78, planeY + 38 - tilt);
-              ctx.lineTo(center.x - radius * 1.42, planeY + 38 + tilt);
-              ctx.closePath();
-              ctx.fill();
-              ctx.stroke();
-
-              ctx.strokeStyle = "#7c3aed";
-              ctx.lineWidth = 3;
-              ctx.beginPath();
-              ctx.ellipse(center.x, planeY + 18, radius * 0.62, Math.max(18, 34 - Math.abs(angle - 45) * 0.22), -tilt * Math.PI / 180, 0, Math.PI * 2);
-              ctx.stroke();
-
-              ctx.fillStyle = "#334155";
-              ctx.font = "14px sans-serif";
-              ctx.fillText("平面截圆锥形成圆锥曲线", 16, height - 18);
-              ctx.restore();
-            } else if (isVector) {
-              ctx.save();
-              ctx.fillStyle = "rgba(37, 99, 235, 0.12)";
-              ctx.strokeStyle = "#2563eb";
-              ctx.beginPath();
-              ctx.moveTo(center.x - 130, center.y + 64);
-              ctx.lineTo(center.x + 132, center.y + 38);
-              ctx.lineTo(center.x + 92, center.y - 34);
-              ctx.lineTo(center.x - 160, center.y - 10);
-              ctx.closePath();
-              ctx.fill();
-              ctx.stroke();
-              drawArrow(ctx, center, { x: center.x + 106, y: center.y - 82 }, "#7c3aed", "v");
-              drawArrow(ctx, center, { x: center.x + 116, y: center.y + 20 }, "#f97316", "投影");
-              ctx.fillStyle = "#334155";
-              ctx.font = "14px sans-serif";
-              ctx.fillText("三维向量与平面关系示意", 16, height - 18);
-              ctx.restore();
-            } else {
-              ctx.save();
-              ctx.fillStyle = "#334155";
-              ctx.font = "15px sans-serif";
-              ctx.fillText("AI 组件画布预览", 18, 28);
-              ctx.font = "13px sans-serif";
-              ctx.fillStyle = "#64748b";
-              ctx.fillText(reason ? "生成脚本未绘制内容，已显示预览占位图。" : "等待组件脚本绘制内容。", 18, 50);
-              ctx.restore();
-            }
-
-            canvas.dataset.aiFallbackDrawn = "true";
-          }
-
-          function ensureCanvasPreview(reason) {
-            const text = root.innerText || "";
-            const mustShowSpatialPreview = /圆锥|圆锥曲线|椭圆|双曲线|抛物线|三维|向量|平面|夹角|坐标|conic|cone|vector|plane|3d/i.test(text);
-            const canvases = Array.from(root.querySelectorAll("canvas"));
-            if (!canvases.length && /canvas|三维|圆锥|向量|平面|坐标/i.test(text)) {
-              canvases.push(ensureCanvas("canvas"));
-            }
-
-            const visibleCanvases = canvases.map(canvas => {
-              ensureCanvas(canvas);
-              if (!mustShowSpatialPreview) return canvas;
-
-              let fallbackCanvas = canvas.nextElementSibling;
-              if (!fallbackCanvas || !fallbackCanvas.classList?.contains("ai-runtime-fallback-canvas")) {
-                fallbackCanvas = document.createElement("canvas");
-                fallbackCanvas.className = (canvas.className || "ai-generated-canvas") + " ai-runtime-fallback-canvas";
-                fallbackCanvas.width = canvas.width || 560;
-                fallbackCanvas.height = canvas.height || 340;
-                fallbackCanvas.style.cssText = canvas.style.cssText;
-                fallbackCanvas.style.display = "block";
-                fallbackCanvas.style.maxWidth = "100%";
-                fallbackCanvas.style.background = "#ffffff";
-                canvas.insertAdjacentElement("afterend", fallbackCanvas);
-              }
-              canvas.style.display = "none";
-              return fallbackCanvas;
-            });
-
-            visibleCanvases.forEach(canvas => {
-              ensureCanvas(canvas);
-              if (mustShowSpatialPreview || canvasLooksBlank(canvas)) drawFallbackCanvas(canvas, reason);
-            });
-
-            root.querySelectorAll("input[type='range']").forEach(input => {
-              if (input.dataset.aiCanvasFallbackBound) return;
-              input.dataset.aiCanvasFallbackBound = "true";
-              input.addEventListener("input", () => {
-                visibleCanvases.forEach(canvas => {
-                  if (canvas.dataset.aiFallbackDrawn || canvasLooksBlank(canvas)) drawFallbackCanvas(canvas);
-                });
-              });
-            });
           }
 
           const helpers = {
@@ -3911,22 +3653,9 @@ ${componentHtml}
             }
           };
 
-          root.querySelector = function(selector) {
-            const element = originalQuerySelector(selector);
-            if (selector && String(selector).includes("canvas") && (!element || String(element.tagName).toLowerCase() !== "canvas")) {
-              return ensureCanvas(selector);
-            }
-            return element;
-          };
-
-          root.getContext = function(type) {
-            return helpers.canvas().getContext(type);
-          };
-
           return {
             canvas: helpers.canvas,
-            context2d: helpers.context2d,
-            ensureCanvasPreview
+            context2d: helpers.context2d
           };
         }
       `;
