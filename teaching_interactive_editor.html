@@ -560,6 +560,31 @@
       display: block;
     }
 
+    .image-quality-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin: 10px 0;
+    }
+
+    .image-quality-row label {
+      margin: 0;
+    }
+
+    .image-quality-value {
+      min-width: 24px;
+      text-align: right;
+      font-size: 13px;
+      font-weight: 700;
+      color: #2563eb;
+    }
+
+    .image-quality-row input[type="range"] {
+      grid-column: 1 / -1;
+      padding: 0;
+    }
+
     .inline-actions {
       display: flex;
       gap: 8px;
@@ -749,6 +774,23 @@
       vertical-align: middle;
     }
 
+    .image-block[data-wrap="inline"][data-align="left"] {
+      margin-left: 0;
+      margin-right: 8px;
+    }
+
+    .image-block[data-wrap="inline"][data-align="center"] {
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .image-block[data-wrap="inline"][data-align="right"] {
+      display: block;
+      margin-left: auto;
+      margin-right: 0;
+    }
+
     .image-block[data-wrap="square-left"] {
       float: left;
       clear: none;
@@ -767,6 +809,8 @@
       width: 100%;
       aspect-ratio: var(--image-aspect, 1.3333);
       line-height: 0;
+      overflow: hidden;
+      border-radius: 10px;
     }
 
     .image-block[data-quarter-turn="true"] .image-frame {
@@ -805,6 +849,11 @@
       transform-origin: center center;
       object-fit: cover;
       translate: -50% -50%;
+    }
+
+    .image-block[data-fit="contain"] .editor-image {
+      object-fit: contain;
+      background: #ffffff;
     }
 
     .image-block[data-quarter-turn="true"] .editor-image {
@@ -1100,8 +1149,13 @@
               <button id="image-url-tab" onclick="setImageSource('url')">图片 URL</button>
             </div>
             <div id="image-local-panel" class="image-source-panel active">
+              <div class="image-quality-row">
+                <label for="image-quality-input">压缩质量</label>
+                <span class="image-quality-value"><span id="image-quality-value">8</span>/10</span>
+                <input id="image-quality-input" type="range" min="1" max="10" step="1" value="8">
+              </div>
               <button class="primary-btn" onclick="triggerImageInsert()">选择本地图片</button>
-              <div class="help-text">本地图片会自动转为 base64 写入页面，导出后可离线显示。</div>
+              <div id="image-compress-status" class="help-text">本地图片会按所选质量压缩为 base64 写入页面，导出后可离线显示。</div>
             </div>
             <div id="image-url-panel" class="image-source-panel">
               <input id="image-url-input" placeholder="https://example.com/image.png">
@@ -1229,6 +1283,9 @@
     const configContent = document.getElementById("config-content");
     const imageInput = document.getElementById("image-input");
     const imageMenu = document.getElementById("image-menu");
+    const imageQualityInput = document.getElementById("image-quality-input");
+    const imageQualityValue = document.getElementById("image-quality-value");
+    const imageCompressStatus = document.getElementById("image-compress-status");
     const tablePicker = document.getElementById("table-picker");
     const tableGrid = document.getElementById("table-grid");
     const tableSizeLabel = document.getElementById("table-size-label");
@@ -1386,6 +1443,65 @@
               <p>${escapeHtml(config.content)}</p>
             </section>
           `;
+        }
+      },
+
+      "geometry-2d": {
+        name: "平面几何绘图",
+        defaultConfig: {
+          title: "平面几何绘图",
+          summary: "用标准 SVG 几何对象绘制点、线、圆和多边形。",
+          viewBox: { xMin: -6, xMax: 6, yMin: -4, yMax: 4 },
+          objects: [
+            { type: "point", id: "A", label: "A", x: -2, y: 1 },
+            { type: "point", id: "B", label: "B", x: 2, y: 1 },
+            { type: "point", id: "C", label: "C", x: 0, y: -2 },
+            { type: "polygon", points: ["A", "B", "C"], label: "triangle ABC" }
+          ],
+          annotations: [],
+          questions: []
+        },
+        renderEditor(config, id) {
+          return `
+            <div class="component-block" contenteditable="false" draggable="true" data-component-id="${id}" data-component-type="geometry-2d">
+              <div class="component-badge">平面几何</div>
+              <div class="component-preview-title">${escapeHtml(config.title || "平面几何绘图")}</div>
+              <div class="component-preview-text">${escapeHtml(config.summary || "标准 SVG 几何绘图组件。")}</div>
+            </div>
+          `;
+        },
+        renderExport(config, id) {
+          return renderGeometry2DExport(config, id);
+        }
+      },
+
+      "geometry-3d": {
+        name: "立体几何绘图",
+        defaultConfig: {
+          title: "立体几何绘图",
+          summary: "用标准 3D 几何对象绘制点、线、平面和立体。",
+          camera: { yaw: -35, pitch: 24, scale: 90 },
+          objects: [
+            { type: "point", id: "A", label: "A", x: -1, y: -1, z: 0 },
+            { type: "point", id: "B", label: "B", x: 1, y: -1, z: 0 },
+            { type: "point", id: "C", label: "C", x: 0, y: 1, z: 0 },
+            { type: "point", id: "S", label: "S", x: 0, y: 0, z: 2 },
+            { type: "polyhedron", vertices: ["A", "B", "C", "S"], edges: [["A", "B"], ["B", "C"], ["C", "A"], ["S", "A"], ["S", "B"], ["S", "C"]] }
+          ],
+          annotations: [],
+          questions: []
+        },
+        renderEditor(config, id) {
+          return `
+            <div class="component-block" contenteditable="false" draggable="true" data-component-id="${id}" data-component-type="geometry-3d">
+              <div class="component-badge">立体几何</div>
+              <div class="component-preview-title">${escapeHtml(config.title || "立体几何绘图")}</div>
+              <div class="component-preview-text">${escapeHtml(config.summary || "标准 3D 几何绘图组件。")}</div>
+            </div>
+          `;
+        },
+        renderExport(config, id) {
+          return renderGeometry3DExport(config, id);
         }
       },
 
@@ -1627,6 +1743,10 @@
       const rotation = getImageRotation(selectedImageBlock);
       const alignment = getImageAlignment(selectedImageBlock);
       const wrap = getImageWrap(selectedImageBlock);
+      const fit = getImageFitMode(selectedImageBlock);
+      const cropRatio = getImageCropRatio(selectedImageBlock);
+      const cropX = getImageCropPosition(selectedImageBlock, "x");
+      const cropY = getImageCropPosition(selectedImageBlock, "y");
 
       configContent.innerHTML = `
         <div class="image-config-card">
@@ -1668,6 +1788,40 @@
               <button class="${alignment === "center" ? "active" : ""}" onclick="setImageAlignment('center')">居中</button>
               <button class="${alignment === "right" ? "active" : ""}" onclick="setImageAlignment('right')">右</button>
             </div>
+          </div>
+
+          <div class="config-field">
+            <label>显示方式</label>
+            <div class="segmented-control">
+              <button class="${fit === "contain" ? "active" : ""}" onclick="setImageFitMode('contain')">完整显示</button>
+              <button class="${fit === "cover" ? "active" : ""}" onclick="setImageFitMode('cover')">裁剪填充</button>
+            </div>
+          </div>
+
+          <div class="config-field">
+            <label>裁剪比例</label>
+            <div class="segmented-control wrap-control">
+              <button class="${cropRatio === "original" ? "active" : ""}" onclick="setImageCropRatio('original')">原比例</button>
+              <button class="${cropRatio === "1:1" ? "active" : ""}" onclick="setImageCropRatio('1:1')">1:1</button>
+              <button class="${cropRatio === "4:3" ? "active" : ""}" onclick="setImageCropRatio('4:3')">4:3</button>
+              <button class="${cropRatio === "16:9" ? "active" : ""}" onclick="setImageCropRatio('16:9')">16:9</button>
+            </div>
+          </div>
+
+          <div class="config-field">
+            <label>
+              <span>裁剪焦点 X</span>
+              <span class="config-value"><span id="cfg-image-crop-x-value">${cropX}</span>%</span>
+            </label>
+            <input id="cfg-image-crop-x" type="range" min="0" max="100" step="1" value="${cropX}" oninput="previewImageCropPosition('x', this.value)">
+          </div>
+
+          <div class="config-field">
+            <label>
+              <span>裁剪焦点 Y</span>
+              <span class="config-value"><span id="cfg-image-crop-y-value">${cropY}</span>%</span>
+            </label>
+            <input id="cfg-image-crop-y" type="range" min="0" max="100" step="1" value="${cropY}" oninput="previewImageCropPosition('y', this.value)">
           </div>
 
           <div class="button-grid">
@@ -1785,6 +1939,23 @@
         `;
       }
 
+      if (configType === "geometry-2d" || configType === "geometry-3d") {
+        configContent.innerHTML = `
+          <label>标题</label>
+          <input id="cfg-title" value="${escapeAttr(config.title || "")}">
+
+          <label>说明</label>
+          <textarea id="cfg-summary">${escapeHtml(config.summary || "")}</textarea>
+
+          <label>标准组件配置 JSON</label>
+          <textarea id="cfg-geometry-json" class="custom-code-field">${escapeHtml(JSON.stringify(config, null, 2))}</textarea>
+
+          <div class="help-text">${configType === "geometry-2d" ? "平面几何使用标准 SVG 对象：point、segment、line、circle、polygon、angle。" : "立体几何使用标准 canvas 投影对象：point、segment、plane、polyhedron、cone。"}</div>
+          <button class="primary-btn" onclick="saveGeometryConfig('${id}')">保存配置</button>
+          <button class="danger-btn" onclick="deleteComponent('${id}')">删除组件</button>
+        `;
+      }
+
       if (configType === "custom-interactive") {
         configContent.innerHTML = `
           <label>标题</label>
@@ -1844,6 +2015,21 @@
       const data = componentData[id];
       data.config.title = document.getElementById("cfg-title").value;
       data.config.content = document.getElementById("cfg-content").value;
+      refreshComponent(id);
+    }
+
+    function saveGeometryConfig(id) {
+      const data = componentData[id];
+      let parsed = {};
+      try {
+        parsed = JSON.parse(document.getElementById("cfg-geometry-json").value || "{}");
+      } catch (error) {
+        alert("几何配置 JSON 解析失败：" + error.message);
+        return;
+      }
+      parsed.title = document.getElementById("cfg-title").value;
+      parsed.summary = document.getElementById("cfg-summary").value;
+      data.config = sanitizeGeneratedConfig(componentRegistry[data.type]?.baseType || data.type, parsed);
       refreshComponent(id);
     }
 
@@ -2060,18 +2246,101 @@
       imageInput.click();
     }
 
-    imageInput.addEventListener("change", event => {
+    imageQualityInput.addEventListener("input", event => {
+      imageQualityValue.textContent = event.target.value;
+    });
+
+    imageInput.addEventListener("change", async event => {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = () => {
+      if (!file.type.startsWith("image/")) {
+        imageCompressStatus.textContent = "请选择图片文件。";
+        return;
+      }
+
+      const qualityLevel = Number.parseInt(imageQualityInput.value, 10) || 8;
+      imageCompressStatus.textContent = `正在按 ${qualityLevel}/10 质量压缩图片...`;
+
+      try {
+        const compressedSrc = await compressLocalImage(file, qualityLevel);
         const alt = escapeAttr(file.name.replace(/\.[^.]+$/, "") || "教学图片");
-        insertHtmlAtCursor(createImageBlockHtml(reader.result, alt));
+        insertHtmlAtCursor(createImageBlockHtml(compressedSrc, alt));
+        imageCompressStatus.textContent = `压缩完成：${formatBytes(file.size)} -> ${formatBytes(dataUrlByteSize(compressedSrc))}`;
         closeToolbarPopovers();
-      };
-      reader.readAsDataURL(file);
+      } catch (error) {
+        console.warn("图片压缩失败，改为插入原图。", error);
+        const originalSrc = await readFileAsDataUrl(file);
+        const alt = escapeAttr(file.name.replace(/\.[^.]+$/, "") || "教学图片");
+        insertHtmlAtCursor(createImageBlockHtml(originalSrc, alt));
+        imageCompressStatus.textContent = "压缩失败，已插入原图。";
+        closeToolbarPopovers();
+      }
     });
+
+    function compressLocalImage(file, qualityLevel) {
+      const quality = Math.min(1, Math.max(0.1, qualityLevel / 10));
+      const sourceUrl = URL.createObjectURL(file);
+
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = image.naturalWidth || image.width;
+            canvas.height = image.naturalHeight || image.height;
+
+            if (!canvas.width || !canvas.height) {
+              reject(new Error("无法读取图片尺寸"));
+              return;
+            }
+
+            const context = canvas.getContext("2d");
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+            let dataUrl = canvas.toDataURL("image/webp", quality);
+            if (!dataUrl.startsWith("data:image/webp")) {
+              context.globalCompositeOperation = "destination-over";
+              context.fillStyle = "#ffffff";
+              context.fillRect(0, 0, canvas.width, canvas.height);
+              dataUrl = canvas.toDataURL("image/jpeg", quality);
+            }
+
+            resolve(dataUrl);
+          } catch (error) {
+            reject(error);
+          } finally {
+            URL.revokeObjectURL(sourceUrl);
+          }
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(sourceUrl);
+          reject(new Error("图片加载失败"));
+        };
+        image.src = sourceUrl;
+      });
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error("文件读取失败"));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function dataUrlByteSize(dataUrl) {
+      const base64 = String(dataUrl).split(",")[1] || "";
+      const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+      return Math.max(0, Math.floor(base64.length * 3 / 4) - padding);
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+    }
 
     function insertImageUrl() {
       const urlInput = document.getElementById("image-url-input");
@@ -2088,9 +2357,9 @@
 
     function createImageBlockHtml(src, alt) {
       return `
-        <figure class="image-block" contenteditable="false" data-width="70" data-rotation="0" data-align="center" data-wrap="top-bottom" style="width: 70%; --image-width: 70%; margin-left: auto; margin-right: auto;">
+        <figure class="image-block" contenteditable="false" data-width="70" data-rotation="0" data-align="center" data-wrap="top-bottom" data-fit="cover" data-crop-ratio="original" data-crop-x="50" data-crop-y="50" style="width: 70%; --image-width: 70%; --image-crop-x: 50%; --image-crop-y: 50%; margin-left: auto; margin-right: auto;">
           <span class="image-frame">
-            <img class="editor-image" src="${src}" alt="${alt}" style="transform: rotate(0deg);">
+            <img class="editor-image" src="${src}" alt="${alt}" style="transform: rotate(0deg); object-position: 50% 50%;">
           </span>
         </figure>
       `;
@@ -2123,6 +2392,28 @@
       return ["inline", "top-bottom", "square-left", "square-right"].includes(imageBlock.dataset.wrap) ? imageBlock.dataset.wrap : "top-bottom";
     }
 
+    function getImageFitMode(imageBlock) {
+      return ["cover", "contain"].includes(imageBlock.dataset.fit) ? imageBlock.dataset.fit : "cover";
+    }
+
+    function getImageCropRatio(imageBlock) {
+      return ["original", "1:1", "4:3", "16:9"].includes(imageBlock.dataset.cropRatio) ? imageBlock.dataset.cropRatio : "original";
+    }
+
+    function getImageCropPosition(imageBlock, axis) {
+      const key = axis === "y" ? "cropY" : "cropX";
+      const value = Number.parseInt(imageBlock.dataset[key], 10);
+      return Number.isFinite(value) ? clampInteger(value, 0, 100) : 50;
+    }
+
+    function getImageCropAspect(imageBlock, naturalAspect) {
+      const cropRatio = getImageCropRatio(imageBlock);
+      if (cropRatio === "1:1") return 1;
+      if (cropRatio === "4:3") return 4 / 3;
+      if (cropRatio === "16:9") return 16 / 9;
+      return naturalAspect;
+    }
+
     function normalizeRotation(rotation) {
       let normalized = Number(rotation);
       if (!Number.isFinite(normalized)) return 0;
@@ -2143,8 +2434,10 @@
 
       const apply = () => {
         const aspect = image.naturalWidth && image.naturalHeight ? image.naturalWidth / image.naturalHeight : 1.3333;
-        imageBlock.style.setProperty("--image-aspect", aspect.toFixed(5));
-        imageBlock.style.setProperty("--image-inverse-aspect", (1 / aspect).toFixed(5));
+        const frameAspect = getImageCropAspect(imageBlock, aspect);
+        imageBlock.style.setProperty("--image-natural-aspect", aspect.toFixed(5));
+        imageBlock.style.setProperty("--image-aspect", frameAspect.toFixed(5));
+        imageBlock.style.setProperty("--image-inverse-aspect", (1 / frameAspect).toFixed(5));
       };
 
       if (image.complete) {
@@ -2175,29 +2468,50 @@
       });
     }
 
-    function applyImageTransform(imageBlock, width, rotation, alignment = getImageAlignment(imageBlock), wrap = getImageWrap(imageBlock)) {
+    function applyImageTransform(
+      imageBlock,
+      width,
+      rotation,
+      alignment = getImageAlignment(imageBlock),
+      wrap = getImageWrap(imageBlock),
+      fit = getImageFitMode(imageBlock),
+      cropRatio = getImageCropRatio(imageBlock),
+      cropX = getImageCropPosition(imageBlock, "x"),
+      cropY = getImageCropPosition(imageBlock, "y")
+    ) {
       const safeWidth = clampInteger(width, 10, 100) || 100;
       const safeRotation = normalizeRotation(clampInteger(rotation, -180, 180) || 0);
       const safeAlignment = ["left", "center", "right"].includes(alignment) ? alignment : "center";
       const safeWrap = ["inline", "top-bottom", "square-left", "square-right"].includes(wrap) ? wrap : "top-bottom";
+      const safeFit = ["cover", "contain"].includes(fit) ? fit : "cover";
+      const safeCropRatio = ["original", "1:1", "4:3", "16:9"].includes(cropRatio) ? cropRatio : "original";
+      const safeCropX = clampInteger(cropX, 0, 100) ?? 50;
+      const safeCropY = clampInteger(cropY, 0, 100) ?? 50;
       const image = imageBlock.querySelector(".editor-image");
       ensureImageFrame(imageBlock);
-      updateImageMetrics(imageBlock);
       imageBlock.dataset.width = safeWidth;
       imageBlock.dataset.rotation = safeRotation;
       imageBlock.dataset.align = safeAlignment;
       imageBlock.dataset.wrap = safeWrap;
+      imageBlock.dataset.fit = safeFit;
+      imageBlock.dataset.cropRatio = safeCropRatio;
+      imageBlock.dataset.cropX = safeCropX;
+      imageBlock.dataset.cropY = safeCropY;
       imageBlock.dataset.quarterTurn = isQuarterTurn(safeRotation) ? "true" : "false";
       imageBlock.style.width = `${safeWidth}%`;
       imageBlock.style.setProperty("--image-width", `${safeWidth}%`);
+      imageBlock.style.setProperty("--image-crop-x", `${safeCropX}%`);
+      imageBlock.style.setProperty("--image-crop-y", `${safeCropY}%`);
       image.style.transform = `rotate(${safeRotation}deg)`;
-      if (safeWrap === "top-bottom") {
+      image.style.objectPosition = `${safeCropX}% ${safeCropY}%`;
+      if (safeWrap === "top-bottom" || safeWrap === "inline") {
         imageBlock.style.marginLeft = safeAlignment === "right" ? "auto" : safeAlignment === "center" ? "auto" : "0";
         imageBlock.style.marginRight = safeAlignment === "left" ? "auto" : safeAlignment === "center" ? "auto" : "0";
       } else {
         imageBlock.style.marginLeft = "";
         imageBlock.style.marginRight = "";
       }
+      updateImageMetrics(imageBlock);
       syncImageFrameSize(imageBlock);
     }
 
@@ -2479,6 +2793,7 @@
 <body>
 <script>
 ${getCustomComponentRuntimeScript()}
+${drawStandardGeometry3D.toString()}
 <\/script>
 
 ${componentHtml}
@@ -3167,15 +3482,45 @@ ${componentHtml}
         .map(item => {
           const baseType = normalizeBaseType(item?.baseType || item?.type || item?.componentType || item?.kind);
           if (!componentRegistry[baseType]) return null;
+          const rawConfig = item.defaultConfig || item.config || {};
+          if (!isRawGeneratedConfigUsable(baseType, rawConfig)) return null;
+          const defaultConfig = sanitizeGeneratedConfig(baseType, rawConfig);
+          if (!isSanitizedGeneratedConfigUsable(baseType, defaultConfig)) return null;
           return {
             name: String(item?.name || componentRegistry[baseType].name).slice(0, 24),
             description: String(item?.description || "AI 生成的自定义组件").slice(0, 80),
             baseType,
-            defaultConfig: sanitizeGeneratedConfig(baseType, item.defaultConfig || item.config || {})
+            defaultConfig
           };
         })
         .filter(Boolean)
         .slice(0, 3);
+    }
+
+    function isRawGeneratedConfigUsable(baseType, config) {
+      if (!config || typeof config !== "object") return false;
+      if (baseType === "choice-question") return Array.isArray(config.options) && config.options.length >= 2 && Boolean(config.question);
+      if (baseType === "fill-blank") return Boolean(config.question) && Boolean(config.answer);
+      if (baseType === "info-card") return Boolean(config.title || config.content);
+      if (baseType === "function-plot") return Boolean(config.expression);
+      if (baseType === "custom-interactive") return hasGeneratedCode(config.html, config.htmlLines);
+      if (baseType === "geometry-2d" || baseType === "geometry-3d") return Array.isArray(config.objects) && config.objects.length > 0;
+      return true;
+    }
+
+    function isSanitizedGeneratedConfigUsable(baseType, config) {
+      if (baseType === "choice-question") return Array.isArray(config.options) && config.options.length >= 2 && Boolean(config.question);
+      if (baseType === "fill-blank") return Boolean(config.question) && Boolean(config.answer);
+      if (baseType === "function-plot") return Boolean(config.expression);
+      if (baseType === "custom-interactive") return Boolean(String(config.html || "").trim());
+      if (baseType === "geometry-2d" || baseType === "geometry-3d") return Array.isArray(config.objects) && config.objects.length > 0;
+      return true;
+    }
+
+    function hasGeneratedCode(value, lines) {
+      if (Array.isArray(lines)) return lines.some(line => String(line || "").trim());
+      if (Array.isArray(value)) return value.some(line => String(line || "").trim());
+      return Boolean(String(value || "").trim());
     }
 
     function normalizeBaseType(value) {
@@ -3186,6 +3531,21 @@ ${componentHtml}
         "graph": "function-plot",
         "函数绘图仪": "function-plot",
         "函数图像": "function-plot",
+        "平面几何": "geometry-2d",
+        "平面几何绘图": "geometry-2d",
+        "几何2d": "geometry-2d",
+        "二维几何": "geometry-2d",
+        "geometry-2d": "geometry-2d",
+        "plane-geometry": "geometry-2d",
+        "svg-geometry": "geometry-2d",
+        "立体几何": "geometry-3d",
+        "立体几何绘图": "geometry-3d",
+        "空间几何": "geometry-3d",
+        "几何3d": "geometry-3d",
+        "三维几何": "geometry-3d",
+        "geometry-3d": "geometry-3d",
+        "solid-geometry": "geometry-3d",
+        "spatial-geometry": "geometry-3d",
         "选择题表单": "choice-question",
         "选择题": "choice-question",
         "choice": "choice-question",
@@ -3234,6 +3594,14 @@ ${componentHtml}
           merged.yMin = defaults.yMin;
           merged.yMax = defaults.yMax;
         }
+      }
+
+      if (baseType === "geometry-2d") {
+        return normalizeGeometry2DConfig(merged);
+      }
+
+      if (baseType === "geometry-3d") {
+        return normalizeGeometry3DConfig(merged);
       }
 
       if (baseType === "custom-interactive") {
@@ -3531,6 +3899,292 @@ ${componentHtml}
       const number = Number.parseInt(value, 10);
       if (!Number.isFinite(number)) return null;
       return Math.min(max, Math.max(min, number));
+    }
+
+    function renderGeometry2DExport(config, id) {
+      const normalized = normalizeGeometry2DConfig(config);
+      const viewBox = normalized.viewBox;
+      const width = 680;
+      const height = 420;
+      const pointMap = buildPointMap2D(normalized.objects);
+      const mapX = x => (Number(x) - viewBox.xMin) / (viewBox.xMax - viewBox.xMin) * width;
+      const mapY = y => height - (Number(y) - viewBox.yMin) / (viewBox.yMax - viewBox.yMin) * height;
+      const resolvePoint = point => {
+        if (typeof point === "string") return pointMap[point] || null;
+        if (point && Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y))) return point;
+        return null;
+      };
+
+      const grid = [];
+      for (let x = Math.ceil(viewBox.xMin); x <= Math.floor(viewBox.xMax); x += 1) {
+        grid.push(`<line x1="${mapX(x).toFixed(2)}" y1="0" x2="${mapX(x).toFixed(2)}" y2="${height}" class="geo-grid-line"></line>`);
+      }
+      for (let y = Math.ceil(viewBox.yMin); y <= Math.floor(viewBox.yMax); y += 1) {
+        grid.push(`<line x1="0" y1="${mapY(y).toFixed(2)}" x2="${width}" y2="${mapY(y).toFixed(2)}" class="geo-grid-line"></line>`);
+      }
+
+      const shapes = normalized.objects.map(object => {
+        if (object.type === "point") {
+          const x = mapX(object.x);
+          const y = mapY(object.y);
+          return `<g><circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="5" class="geo-point"></circle><text x="${(x + 8).toFixed(2)}" y="${(y - 8).toFixed(2)}" class="geo-label">${escapeHtml(object.label || object.id || "")}</text></g>`;
+        }
+
+        if (object.type === "segment" || object.type === "line") {
+          const a = resolvePoint(object.from || object.a || object.points?.[0]);
+          const b = resolvePoint(object.to || object.b || object.points?.[1]);
+          if (!a || !b) return "";
+          return `<line x1="${mapX(a.x).toFixed(2)}" y1="${mapY(a.y).toFixed(2)}" x2="${mapX(b.x).toFixed(2)}" y2="${mapY(b.y).toFixed(2)}" class="geo-line"></line>`;
+        }
+
+        if (object.type === "circle") {
+          const center = resolvePoint(object.center);
+          const radius = Math.abs(Number(object.radius || object.r || 1));
+          if (!center || !Number.isFinite(radius)) return "";
+          const rx = Math.abs(mapX(center.x + radius) - mapX(center.x));
+          return `<circle cx="${mapX(center.x).toFixed(2)}" cy="${mapY(center.y).toFixed(2)}" r="${rx.toFixed(2)}" class="geo-circle"></circle>`;
+        }
+
+        if (object.type === "polygon") {
+          const points = (object.points || []).map(resolvePoint).filter(Boolean);
+          if (points.length < 3) return "";
+          const coords = points.map(point => `${mapX(point.x).toFixed(2)},${mapY(point.y).toFixed(2)}`).join(" ");
+          const label = object.label ? `<text x="${mapX(points[0].x).toFixed(2)}" y="${(mapY(points[0].y) + 22).toFixed(2)}" class="geo-label">${escapeHtml(object.label)}</text>` : "";
+          return `<g><polygon points="${coords}" class="geo-polygon"></polygon>${label}</g>`;
+        }
+
+        if (object.type === "angle") {
+          const vertex = resolvePoint(object.vertex || object.o || object.center);
+          const from = resolvePoint(object.from || object.a);
+          const to = resolvePoint(object.to || object.b);
+          if (!vertex || !from || !to) return "";
+          const v = { x: mapX(vertex.x), y: mapY(vertex.y) };
+          const a1 = Math.atan2(mapY(from.y) - v.y, mapX(from.x) - v.x);
+          const a2 = Math.atan2(mapY(to.y) - v.y, mapX(to.x) - v.x);
+          const r = Number(object.radius || 34);
+          const p1 = { x: v.x + Math.cos(a1) * r, y: v.y + Math.sin(a1) * r };
+          const p2 = { x: v.x + Math.cos(a2) * r, y: v.y + Math.sin(a2) * r };
+          const largeArc = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
+          const mid = (a1 + a2) / 2;
+          const label = object.label ? `<text x="${(v.x + Math.cos(mid) * (r + 20)).toFixed(2)}" y="${(v.y + Math.sin(mid) * (r + 20)).toFixed(2)}" class="geo-label">${escapeHtml(object.label)}</text>` : "";
+          return `<g><path d="M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}" class="geo-angle"></path>${label}</g>`;
+        }
+
+        return "";
+      }).join("");
+
+      const questions = renderGeometryQuestions(normalized.questions);
+      return `
+        <section class="interactive-card geometry-card" id="${id}">
+          <h3>${escapeHtml(normalized.title)}</h3>
+          <p>${escapeHtml(normalized.summary)}</p>
+          <style>${getGeometry2DStyle()}</style>
+          <svg class="geometry-2d-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeAttr(normalized.title)}">
+            <rect x="0" y="0" width="${width}" height="${height}" class="geo-bg"></rect>
+            ${grid.join("")}
+            <line x1="0" y1="${mapY(0).toFixed(2)}" x2="${width}" y2="${mapY(0).toFixed(2)}" class="geo-axis"></line>
+            <line x1="${mapX(0).toFixed(2)}" y1="0" x2="${mapX(0).toFixed(2)}" y2="${height}" class="geo-axis"></line>
+            ${shapes}
+          </svg>
+          ${questions}
+        </section>
+      `;
+    }
+
+    function renderGeometry3DExport(config, id) {
+      const normalized = normalizeGeometry3DConfig(config);
+      const canvasId = `${id}_canvas`;
+      return `
+        <section class="interactive-card geometry-card" id="${id}">
+          <h3>${escapeHtml(normalized.title)}</h3>
+          <p>${escapeHtml(normalized.summary)}</p>
+          <canvas id="${escapeAttr(canvasId)}" class="geometry-3d-canvas" width="680" height="420" data-config="${escapeAttr(JSON.stringify(normalized))}"></canvas>
+          ${renderGeometryQuestions(normalized.questions)}
+          <style>${getGeometry3DStyle()}</style>
+          <script>
+            (function() {
+              try {
+                const canvas = document.getElementById("${escapeAttr(canvasId)}");
+                if (!canvas) return;
+                drawStandardGeometry3D(canvas, JSON.parse(canvas.dataset.config || "{}"));
+              } catch (error) {
+                const canvas = document.getElementById("${escapeAttr(canvasId)}");
+                const message = document.createElement("p");
+                message.className = "geometry-error";
+                message.textContent = "立体几何绘图失败：" + error.message;
+                if (canvas) canvas.after(message);
+              }
+            })();
+          <\/script>
+        </section>
+      `;
+    }
+
+    function getGeometry2DStyle() {
+      return ".geometry-card{margin:14px 0}.geometry-2d-svg{display:block;width:100%;max-width:720px;border:1px solid #d1d5db;border-radius:10px;background:#fff}.geo-bg{fill:#fff}.geo-grid-line{stroke:#eef2f7;stroke-width:1}.geo-axis{stroke:#94a3b8;stroke-width:1.4}.geo-line{stroke:#2563eb;stroke-width:3;stroke-linecap:round}.geo-circle{fill:none;stroke:#7c3aed;stroke-width:3}.geo-polygon{fill:rgba(37,99,235,.12);stroke:#2563eb;stroke-width:3}.geo-point{fill:#dc2626}.geo-label{fill:#111827;font:14px system-ui,sans-serif}.geo-angle{fill:none;stroke:#f59e0b;stroke-width:3}";
+    }
+
+    function getGeometry3DStyle() {
+      return ".geometry-3d-canvas{display:block;width:100%;max-width:720px;border:1px solid #d1d5db;border-radius:10px;background:#fff}.geometry-error{color:#dc2626;font-weight:700}";
+    }
+
+    function renderGeometryQuestions(questions) {
+      if (!Array.isArray(questions) || !questions.length) return "";
+      return `<div class="geometry-questions">${questions.map(item => `<p>${escapeHtml(item.prompt || item.question || item)}</p>`).join("")}</div>`;
+    }
+
+    function buildPointMap2D(objects) {
+      const map = {};
+      objects.filter(object => object.type === "point" && object.id).forEach(object => {
+        map[object.id] = object;
+      });
+      return map;
+    }
+
+    function normalizeGeometry2DConfig(config) {
+      const defaults = componentRegistry["geometry-2d"].defaultConfig;
+      const merged = { ...deepClone(defaults), ...config };
+      merged.title = String(merged.title || defaults.title).slice(0, 40);
+      merged.summary = String(merged.summary || defaults.summary).slice(0, 180);
+      merged.viewBox = normalizeViewBox(merged.viewBox, defaults.viewBox);
+      merged.objects = normalizeGeometryObjects(merged.objects, false);
+      merged.questions = Array.isArray(merged.questions) ? merged.questions.slice(0, 6) : [];
+      return merged;
+    }
+
+    function normalizeGeometry3DConfig(config) {
+      const defaults = componentRegistry["geometry-3d"].defaultConfig;
+      const merged = { ...deepClone(defaults), ...config };
+      merged.title = String(merged.title || defaults.title).slice(0, 40);
+      merged.summary = String(merged.summary || defaults.summary).slice(0, 180);
+      merged.camera = {
+        yaw: parseAiNumber(merged.camera?.yaw, defaults.camera.yaw),
+        pitch: parseAiNumber(merged.camera?.pitch, defaults.camera.pitch),
+        scale: parseAiNumber(merged.camera?.scale, defaults.camera.scale)
+      };
+      merged.objects = normalizeGeometryObjects(merged.objects, true);
+      merged.questions = Array.isArray(merged.questions) ? merged.questions.slice(0, 6) : [];
+      return merged;
+    }
+
+    function normalizeViewBox(value, defaults) {
+      const normalized = {
+        xMin: parseAiNumber(value?.xMin, defaults.xMin),
+        xMax: parseAiNumber(value?.xMax, defaults.xMax),
+        yMin: parseAiNumber(value?.yMin, defaults.yMin),
+        yMax: parseAiNumber(value?.yMax, defaults.yMax)
+      };
+      if (normalized.xMin >= normalized.xMax) {
+        normalized.xMin = defaults.xMin;
+        normalized.xMax = defaults.xMax;
+      }
+      if (normalized.yMin >= normalized.yMax) {
+        normalized.yMin = defaults.yMin;
+        normalized.yMax = defaults.yMax;
+      }
+      return normalized;
+    }
+
+    function normalizeGeometryObjects(objects, is3d) {
+      if (!Array.isArray(objects)) return [];
+      const allowed = is3d ? new Set(["point", "segment", "line", "plane", "polyhedron", "cone"]) : new Set(["point", "segment", "line", "circle", "polygon", "angle"]);
+      return objects
+        .filter(object => object && allowed.has(String(object.type || "").toLowerCase()))
+        .slice(0, 80)
+        .map(object => ({ ...object, type: String(object.type).toLowerCase() }));
+    }
+
+    function drawStandardGeometry3D(canvas, config) {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("无法创建 3D 绘图上下文。");
+      const width = canvas.width;
+      const height = canvas.height;
+      const camera = config.camera || {};
+      const yaw = Number(camera.yaw || -35) * Math.PI / 180;
+      const pitch = Number(camera.pitch || 24) * Math.PI / 180;
+      const scale = Number(camera.scale || 90);
+      const objects = Array.isArray(config.objects) ? config.objects : [];
+      const pointMap = {};
+      objects.filter(object => object.type === "point" && object.id).forEach(object => pointMap[object.id] = object);
+      const resolvePoint = point => typeof point === "string" ? pointMap[point] : point;
+      const project = point => {
+        const x = Number(point.x || 0), y = Number(point.y || 0), z = Number(point.z || 0);
+        const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+        const x1 = x * cy - y * sy;
+        const y1 = x * sy + y * cy;
+        const z1 = z * cp - y1 * sp;
+        const y2 = z * sp + y1 * cp;
+        return { x: width / 2 + x1 * scale, y: height * 0.58 - z1 * scale, depth: y2 };
+      };
+      const drawSegment = (a, b, color = "#2563eb", widthValue = 2.5) => {
+        const p = resolvePoint(a), q = resolvePoint(b);
+        if (!p || !q) return;
+        const pp = project(p), qq = project(q);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = widthValue;
+        ctx.beginPath();
+        ctx.moveTo(pp.x, pp.y);
+        ctx.lineTo(qq.x, qq.y);
+        ctx.stroke();
+      };
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.strokeStyle = "#eef2f7";
+      ctx.lineWidth = 1;
+      for (let x = 20; x < width; x += 28) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
+      for (let y = 20; y < height; y += 28) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
+      drawSegment({ x: -3, y: 0, z: 0 }, { x: 3, y: 0, z: 0 }, "#94a3b8", 1.5);
+      drawSegment({ x: 0, y: -3, z: 0 }, { x: 0, y: 3, z: 0 }, "#94a3b8", 1.5);
+      drawSegment({ x: 0, y: 0, z: -1 }, { x: 0, y: 0, z: 3 }, "#94a3b8", 1.5);
+
+      objects.forEach(object => {
+        if (object.type === "segment" || object.type === "line") drawSegment(object.from || object.a || object.points?.[0], object.to || object.b || object.points?.[1], object.color || "#2563eb");
+        if (object.type === "polyhedron") (object.edges || []).forEach(edge => drawSegment(edge[0], edge[1], object.color || "#2563eb"));
+        if (object.type === "plane") {
+          const points = (object.points || []).map(resolvePoint).filter(Boolean);
+          if (points.length >= 3) {
+            ctx.fillStyle = object.fill || "rgba(245,158,11,.22)";
+            ctx.strokeStyle = object.color || "#f59e0b";
+            ctx.beginPath();
+            points.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+        if (object.type === "cone") {
+          const center = resolvePoint(object.center) || { x: 0, y: 0, z: 0 };
+          const heightValue = Number(object.height || 2);
+          const cx = Number(center.x || 0);
+          const cy = Number(center.y || 0);
+          const cz = Number(center.z || 0);
+          const apex = resolvePoint(object.apex) || { x: cx, y: cy, z: cz + (Number.isFinite(heightValue) ? heightValue : 2) };
+          const radius = Number(object.radius || 1);
+          const samples = [];
+          for (let i = 0; i <= 48; i += 1) samples.push({ x: cx + Math.cos(i / 48 * Math.PI * 2) * radius, y: cy + Math.sin(i / 48 * Math.PI * 2) * radius, z: cz });
+          ctx.strokeStyle = object.color || "#2563eb";
+          ctx.fillStyle = object.fill || "rgba(37,99,235,.12)";
+          ctx.beginPath();
+          samples.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          [0, 12, 24, 36].forEach(index => drawSegment(apex, samples[index], object.color || "#2563eb", 1.5));
+        }
+      });
+
+      objects.filter(object => object.type === "point").forEach(point => {
+        const p = project(point);
+        ctx.fillStyle = "#dc2626";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#111827";
+        ctx.font = "14px system-ui, sans-serif";
+        ctx.fillText(point.label || point.id || "", p.x + 7, p.y - 7);
+      });
     }
 
     function renderCustomInteractiveExport(config, id) {
@@ -3905,6 +4559,7 @@ ${componentHtml}
 <body>
 <script>
 ${getCustomComponentRuntimeScript()}
+${drawStandardGeometry3D.toString()}
 <\/script>
 
 ${finalBody}
