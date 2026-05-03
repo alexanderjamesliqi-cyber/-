@@ -1950,7 +1950,7 @@
           <label>标准组件配置 JSON</label>
           <textarea id="cfg-geometry-json" class="custom-code-field">${escapeHtml(JSON.stringify(config, null, 2))}</textarea>
 
-          <div class="help-text">${configType === "geometry-2d" ? "平面几何使用标准 SVG 对象：point、segment、line、circle、polygon、angle。" : "立体几何使用标准 canvas 投影对象：point、segment、plane、polyhedron、cone。"}</div>
+          <div class="help-text">${configType === "geometry-2d" ? "平面几何使用标准 SVG 对象：point、segment、line、circle、polygon、angle。" : "立体几何使用标准 Three.js 对象：point、segment、plane、polyhedron、cone、double-cone、ellipse、curve。"}</div>
           <button class="primary-btn" onclick="saveGeometryConfig('${id}')">保存配置</button>
           <button class="danger-btn" onclick="deleteComponent('${id}')">删除组件</button>
         `;
@@ -2846,10 +2846,13 @@
 <body>
 <script>
 ${getCustomComponentRuntimeScript()}
-${drawStandardGeometry3D.toString()}
 <\/script>
 
 ${componentHtml}
+
+<script type="module">
+${getGeometry3DModuleScript()}
+<\/script>
 
 <script>
   function checkChoice(id) {
@@ -4046,29 +4049,16 @@ ${componentHtml}
 
     function renderGeometry3DExport(config, id) {
       const normalized = normalizeGeometry3DConfig(config);
-      const canvasId = `${id}_canvas`;
+      const viewId = `${id}_three_view`;
       return `
         <section class="interactive-card geometry-card" id="${id}">
           <h3>${escapeHtml(normalized.title)}</h3>
           <p>${escapeHtml(normalized.summary)}</p>
-          <canvas id="${escapeAttr(canvasId)}" class="geometry-3d-canvas" width="680" height="420" data-config="${escapeAttr(JSON.stringify(normalized))}"></canvas>
+          <div id="${escapeAttr(viewId)}" class="geometry-3d-view" data-config="${escapeAttr(JSON.stringify(normalized))}">
+            <div class="geometry-loading">正在加载 Three.js 立体几何渲染器...</div>
+          </div>
           ${renderGeometryQuestions(normalized.questions)}
           <style>${getGeometry3DStyle()}</style>
-          <script>
-            (function() {
-              try {
-                const canvas = document.getElementById("${escapeAttr(canvasId)}");
-                if (!canvas) return;
-                drawStandardGeometry3D(canvas, JSON.parse(canvas.dataset.config || "{}"));
-              } catch (error) {
-                const canvas = document.getElementById("${escapeAttr(canvasId)}");
-                const message = document.createElement("p");
-                message.className = "geometry-error";
-                message.textContent = "立体几何绘图失败：" + error.message;
-                if (canvas) canvas.after(message);
-              }
-            })();
-          <\/script>
         </section>
       `;
     }
@@ -4078,7 +4068,7 @@ ${componentHtml}
     }
 
     function getGeometry3DStyle() {
-      return ".geometry-3d-canvas{display:block;width:100%;max-width:720px;border:1px solid #d1d5db;border-radius:10px;background:#fff}.geometry-error{color:#dc2626;font-weight:700}";
+      return ".geometry-3d-view{position:relative;width:100%;max-width:720px;min-height:420px;border:1px solid #d1d5db;border-radius:10px;background:#fff;overflow:hidden}.geometry-3d-view canvas{display:block;width:100%;height:420px}.geometry-loading{display:flex;align-items:center;justify-content:center;height:420px;color:#64748b}.geometry-error{padding:14px;color:#dc2626;font-weight:700}.geometry-label{padding:2px 5px;border-radius:6px;background:rgba(255,255,255,.86);border:1px solid rgba(148,163,184,.45);color:#111827;font:12px system-ui,sans-serif}";
     }
 
     function renderGeometryQuestions(questions) {
@@ -4140,104 +4130,339 @@ ${componentHtml}
 
     function normalizeGeometryObjects(objects, is3d) {
       if (!Array.isArray(objects)) return [];
-      const allowed = is3d ? new Set(["point", "segment", "line", "plane", "polyhedron", "cone"]) : new Set(["point", "segment", "line", "circle", "polygon", "angle"]);
+      const allowed = is3d ? new Set(["point", "segment", "line", "plane", "polyhedron", "cone", "double-cone", "curve", "ellipse"]) : new Set(["point", "segment", "line", "circle", "polygon", "angle"]);
       return objects
         .filter(object => object && allowed.has(String(object.type || "").toLowerCase()))
         .slice(0, 80)
         .map(object => ({ ...object, type: String(object.type).toLowerCase() }));
     }
 
-    function drawStandardGeometry3D(canvas, config) {
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("无法创建 3D 绘图上下文。");
-      const width = canvas.width;
-      const height = canvas.height;
-      const camera = config.camera || {};
-      const yaw = Number(camera.yaw || -35) * Math.PI / 180;
-      const pitch = Number(camera.pitch || 24) * Math.PI / 180;
-      const scale = Number(camera.scale || 90);
-      const objects = Array.isArray(config.objects) ? config.objects : [];
-      const pointMap = {};
-      objects.filter(object => object.type === "point" && object.id).forEach(object => pointMap[object.id] = object);
-      const resolvePoint = point => typeof point === "string" ? pointMap[point] : point;
-      const project = point => {
-        const x = Number(point.x || 0), y = Number(point.y || 0), z = Number(point.z || 0);
-        const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-        const x1 = x * cy - y * sy;
-        const y1 = x * sy + y * cy;
-        const z1 = z * cp - y1 * sp;
-        const y2 = z * sp + y1 * cp;
-        return { x: width / 2 + x1 * scale, y: height * 0.58 - z1 * scale, depth: y2 };
-      };
-      const drawSegment = (a, b, color = "#2563eb", widthValue = 2.5) => {
-        const p = resolvePoint(a), q = resolvePoint(b);
-        if (!p || !q) return;
-        const pp = project(p), qq = project(q);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = widthValue;
-        ctx.beginPath();
-        ctx.moveTo(pp.x, pp.y);
-        ctx.lineTo(qq.x, qq.y);
-        ctx.stroke();
-      };
+    function getGeometry3DModuleScript() {
+      return `
+        import * as THREE from "https://esm.sh/three@0.164.1";
+        import { OrbitControls } from "https://esm.sh/three@0.164.1/examples/jsm/controls/OrbitControls.js";
 
-      ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, width, height);
-      ctx.strokeStyle = "#eef2f7";
-      ctx.lineWidth = 1;
-      for (let x = 20; x < width; x += 28) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
-      for (let y = 20; y < height; y += 28) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
-      drawSegment({ x: -3, y: 0, z: 0 }, { x: 3, y: 0, z: 0 }, "#94a3b8", 1.5);
-      drawSegment({ x: 0, y: -3, z: 0 }, { x: 0, y: 3, z: 0 }, "#94a3b8", 1.5);
-      drawSegment({ x: 0, y: 0, z: -1 }, { x: 0, y: 0, z: 3 }, "#94a3b8", 1.5);
-
-      objects.forEach(object => {
-        if (object.type === "segment" || object.type === "line") drawSegment(object.from || object.a || object.points?.[0], object.to || object.b || object.points?.[1], object.color || "#2563eb");
-        if (object.type === "polyhedron") (object.edges || []).forEach(edge => drawSegment(edge[0], edge[1], object.color || "#2563eb"));
-        if (object.type === "plane") {
-          const points = (object.points || []).map(resolvePoint).filter(Boolean);
-          if (points.length >= 3) {
-            ctx.fillStyle = object.fill || "rgba(245,158,11,.22)";
-            ctx.strokeStyle = object.color || "#f59e0b";
-            ctx.beginPath();
-            points.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
+        document.querySelectorAll(".geometry-3d-view[data-config]").forEach(container => {
+          try {
+            const config = JSON.parse(container.dataset.config || "{}");
+            renderStandardGeometry3D(container, config);
+          } catch (error) {
+            showGeometry3DError(container, error);
           }
-        }
-        if (object.type === "cone") {
-          const center = resolvePoint(object.center) || { x: 0, y: 0, z: 0 };
-          const heightValue = Number(object.height || 2);
-          const cx = Number(center.x || 0);
-          const cy = Number(center.y || 0);
-          const cz = Number(center.z || 0);
-          const apex = resolvePoint(object.apex) || { x: cx, y: cy, z: cz + (Number.isFinite(heightValue) ? heightValue : 2) };
-          const radius = Number(object.radius || 1);
-          const samples = [];
-          for (let i = 0; i <= 48; i += 1) samples.push({ x: cx + Math.cos(i / 48 * Math.PI * 2) * radius, y: cy + Math.sin(i / 48 * Math.PI * 2) * radius, z: cz });
-          ctx.strokeStyle = object.color || "#2563eb";
-          ctx.fillStyle = object.fill || "rgba(37,99,235,.12)";
-          ctx.beginPath();
-          samples.forEach((point, index) => { const p = project(point); index ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          [0, 12, 24, 36].forEach(index => drawSegment(apex, samples[index], object.color || "#2563eb", 1.5));
-        }
-      });
+        });
 
-      objects.filter(object => object.type === "point").forEach(point => {
-        const p = project(point);
-        ctx.fillStyle = "#dc2626";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#111827";
-        ctx.font = "14px system-ui, sans-serif";
-        ctx.fillText(point.label || point.id || "", p.x + 7, p.y - 7);
-      });
+        function renderStandardGeometry3D(container, config) {
+          if (!container || !container.isConnected) throw new Error("立体几何容器不存在。");
+          const width = Math.max(320, Math.round(container.clientWidth || 680));
+          const height = Math.max(320, Math.round(container.clientHeight || 420));
+          container.innerHTML = "";
+
+          const scene = new THREE.Scene();
+          scene.background = new THREE.Color(0xffffff);
+
+          const cameraConfig = config.camera || {};
+          const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
+          const distance = Number(cameraConfig.distance || 9);
+          const yaw = THREE.MathUtils.degToRad(Number(cameraConfig.yaw || -35));
+          const pitch = THREE.MathUtils.degToRad(Number(cameraConfig.pitch || 24));
+          camera.position.set(
+            Math.cos(pitch) * Math.sin(yaw) * distance,
+            Math.cos(pitch) * Math.cos(yaw) * distance,
+            Math.sin(pitch) * distance
+          );
+          camera.up.set(0, 0, 1);
+          camera.lookAt(0, 0, 0.6);
+
+          const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          renderer.setSize(width, height);
+          container.appendChild(renderer.domElement);
+
+          scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+          const keyLight = new THREE.DirectionalLight(0xffffff, 0.82);
+          keyLight.position.set(5, -6, 7);
+          scene.add(keyLight);
+
+          const grid = new THREE.GridHelper(10, 10, 0xcbd5e1, 0xe2e8f0);
+          grid.rotation.x = Math.PI / 2;
+          scene.add(grid);
+          scene.add(new THREE.AxesHelper(3.2));
+
+          const objects = Array.isArray(config.objects) ? config.objects : [];
+          const pointMap = new Map();
+          objects.filter(item => item.type === "point" && item.id).forEach(item => {
+            pointMap.set(String(item.id), toVector3(item));
+          });
+          const resolvePoint = value => {
+            if (typeof value === "string") return pointMap.get(value) || null;
+            if (Array.isArray(value) && value.length >= 3) return toVector3(value);
+            if (value && Number.isFinite(Number(value.x)) && Number.isFinite(Number(value.y)) && Number.isFinite(Number(value.z))) return toVector3(value);
+            return null;
+          };
+
+          objects.forEach(item => {
+            if (item.type === "plane") addPlane(scene, item, resolvePoint);
+            if (item.type === "polyhedron") addPolyhedronFaces(scene, item, resolvePoint);
+            if (item.type === "cone") addCone(scene, item, resolvePoint);
+            if (item.type === "double-cone") addDoubleCone(scene, item, resolvePoint);
+            if (item.type === "curve" || item.type === "ellipse") addCurve(scene, item, resolvePoint);
+          });
+
+          objects.forEach(item => {
+            if (item.type === "segment" || item.type === "line") addSegment(scene, resolvePoint(item.from || item.a || (item.points || [])[0]), resolvePoint(item.to || item.b || (item.points || [])[1]), item.color);
+            if (item.type === "polyhedron") (item.edges || []).forEach(edge => addSegment(scene, resolvePoint(edge[0]), resolvePoint(edge[1]), item.color));
+          });
+
+          objects.filter(item => item.type === "point").forEach(item => {
+            const point = resolvePoint(item.id);
+            if (!point) return;
+            addPoint(scene, point, item.label || item.id);
+          });
+
+          const controls = new OrbitControls(camera, renderer.domElement);
+          controls.target.set(0, 0, 0.6);
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.08;
+          controls.update();
+
+          const resizeObserver = new ResizeObserver(() => {
+            const nextWidth = Math.max(320, Math.round(container.clientWidth || width));
+            const nextHeight = Math.max(320, Math.round(container.clientHeight || height));
+            camera.aspect = nextWidth / nextHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(nextWidth, nextHeight);
+          });
+          resizeObserver.observe(container);
+
+          function animate() {
+            if (!container.isConnected) {
+              resizeObserver.disconnect();
+              renderer.dispose();
+              return;
+            }
+            controls.update();
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+          }
+          animate();
+        }
+
+        function toVector3(point) {
+          if (Array.isArray(point)) return new THREE.Vector3(Number(point[0] || 0), Number(point[1] || 0), Number(point[2] || 0));
+          return new THREE.Vector3(Number(point.x || 0), Number(point.y || 0), Number(point.z || 0));
+        }
+
+        function addPoint(scene, point, label) {
+          const mesh = new THREE.Mesh(
+            new THREE.SphereGeometry(0.075, 24, 16),
+            new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.55 })
+          );
+          mesh.position.copy(point);
+          scene.add(mesh);
+          if (label) scene.add(createLabelSprite(String(label), point.clone().add(new THREE.Vector3(0.12, 0.12, 0.12))));
+        }
+
+        function addSegment(scene, a, b, color) {
+          if (!a || !b) return;
+          const geometry = new THREE.BufferGeometry().setFromPoints([a, b]);
+          const material = new THREE.LineBasicMaterial({ color: color || 0x2563eb });
+          scene.add(new THREE.Line(geometry, material));
+        }
+
+        function addPlane(scene, item, resolvePoint) {
+          const points = (item.points || []).map(resolvePoint).filter(Boolean);
+          if (points.length >= 3) {
+            addFace(scene, points, item.fillColor || 0xf59e0b, item.opacity || 0.24);
+            for (let index = 0; index < points.length; index += 1) addSegment(scene, points[index], points[(index + 1) % points.length], item.color || 0xf59e0b);
+            return;
+          }
+
+          const center = resolvePoint(item.center) || new THREE.Vector3(0, 0, 0);
+          const width = Number(item.width || 3.8);
+          const height = Number(item.height || 3.0);
+          const geometry = new THREE.PlaneGeometry(width, height);
+          const material = new THREE.MeshStandardMaterial({
+            color: item.fillColor || 0xf59e0b,
+            transparent: true,
+            opacity: item.opacity || 0.24,
+            side: THREE.DoubleSide,
+            roughness: 0.7
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.position.copy(center);
+          applyEulerRotation(mesh, item.rotation);
+          scene.add(mesh);
+          const edges = new THREE.LineSegments(
+            new THREE.EdgesGeometry(geometry),
+            new THREE.LineBasicMaterial({ color: item.color || 0xf59e0b })
+          );
+          edges.position.copy(mesh.position);
+          edges.rotation.copy(mesh.rotation);
+          scene.add(edges);
+        }
+
+        function addPolyhedronFaces(scene, item, resolvePoint) {
+          (item.faces || []).forEach(face => {
+            const points = face.map(resolvePoint).filter(Boolean);
+            if (points.length >= 3) addFace(scene, points, item.fillColor || 0x60a5fa, item.opacity || 0.18);
+          });
+        }
+
+        function addFace(scene, points, color, opacity) {
+          const vertices = [];
+          for (let index = 1; index < points.length - 1; index += 1) {
+            [points[0], points[index], points[index + 1]].forEach(point => vertices.push(point.x, point.y, point.z));
+          }
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+          geometry.computeVertexNormals();
+          scene.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+            color,
+            transparent: true,
+            opacity,
+            side: THREE.DoubleSide,
+            roughness: 0.75
+          })));
+        }
+
+        function addCone(scene, item, resolvePoint) {
+          const center = resolvePoint(item.center) || new THREE.Vector3(0, 0, 0);
+          const radius = Number(item.radius || 1);
+          const height = Number(item.height || 2);
+          const apex = resolvePoint(item.apex) || center.clone();
+          const baseCenter = resolvePoint(item.baseCenter) || center.clone().add(new THREE.Vector3(0, 0, height));
+          addConeSurface(scene, apex, baseCenter, radius, item);
+        }
+
+        function addDoubleCone(scene, item, resolvePoint) {
+          const center = resolvePoint(item.center) || new THREE.Vector3(0, 0, 0);
+          const radius = Number(item.radius || 1.45);
+          const height = Number(item.height || 2.7);
+          addConeSurface(scene, center, center.clone().add(new THREE.Vector3(0, 0, height)), radius, item);
+          addConeSurface(scene, center, center.clone().add(new THREE.Vector3(0, 0, -height)), radius, item);
+        }
+
+        function addConeSurface(scene, apex, baseCenter, radius, item) {
+          const segments = Math.max(24, Number(item.segments || 72));
+          const axis = baseCenter.clone().sub(apex);
+          const height = axis.length() || 1;
+          const direction = axis.clone().normalize();
+          const baseNormal = new THREE.Vector3(0, 0, 1);
+          const quaternion = new THREE.Quaternion().setFromUnitVectors(baseNormal, direction);
+          const circlePoints = [];
+          const vertices = [];
+          const localApex = new THREE.Vector3(0, 0, 0);
+
+          for (let index = 0; index <= segments; index += 1) {
+            const angle = index / segments * Math.PI * 2;
+            const point = new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, height)
+              .applyQuaternion(quaternion)
+              .add(apex);
+            circlePoints.push(point);
+          }
+
+          for (let index = 0; index < segments; index += 1) {
+            const a = localApex.clone().applyQuaternion(quaternion).add(apex);
+            const b = circlePoints[index];
+            const c = circlePoints[index + 1];
+            [a, b, c].forEach(point => vertices.push(point.x, point.y, point.z));
+          }
+
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+          geometry.computeVertexNormals();
+          scene.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+            color: item.color || 0x2563eb,
+            transparent: true,
+            opacity: item.opacity || 0.22,
+            side: THREE.DoubleSide,
+            roughness: 0.72
+          })));
+
+          addPolyline(scene, circlePoints, item.edgeColor || 0x1d4ed8, true);
+          [0, Math.floor(segments / 4), Math.floor(segments / 2), Math.floor(segments * 3 / 4)].forEach(index => {
+            addSegment(scene, apex, circlePoints[index], item.edgeColor || 0x1d4ed8);
+          });
+        }
+
+        function addCurve(scene, item, resolvePoint) {
+          const explicitPoints = (item.points || []).map(resolvePoint).filter(Boolean);
+          if (explicitPoints.length >= 2) {
+            addPolyline(scene, explicitPoints, item.color || 0xdc2626, item.closed !== false, Number(item.lineWidth || 3));
+            return;
+          }
+
+          const center = resolvePoint(item.center) || new THREE.Vector3(0, 0, Number(item.z || 0));
+          const radiusX = Number(item.radiusX || item.rx || item.radius || 1.2);
+          const radiusY = Number(item.radiusY || item.ry || item.radius || 0.58);
+          const samples = Math.max(36, Number(item.samples || 96));
+          const points = [];
+          for (let index = 0; index <= samples; index += 1) {
+            const angle = index / samples * Math.PI * 2;
+            points.push(new THREE.Vector3(Math.cos(angle) * radiusX, Math.sin(angle) * radiusY, 0));
+          }
+          const group = new THREE.Group();
+          group.position.copy(center);
+          addPolyline(group, points, item.color || 0xdc2626, true, Number(item.lineWidth || 3));
+          applyEulerRotation(group, item.rotation);
+          scene.add(group);
+        }
+
+        function addPolyline(scene, points, color, closed = false, lineWidth = 2.5) {
+          if (!points.length) return;
+          const linePoints = closed ? [...points, points[0]] : points;
+          const geometry = new THREE.BufferGeometry().setFromPoints(linePoints);
+          const material = new THREE.LineBasicMaterial({ color, linewidth: lineWidth });
+          scene.add(new THREE.Line(geometry, material));
+        }
+
+        function applyEulerRotation(object, rotation) {
+          if (!rotation) return;
+          if (Array.isArray(rotation)) {
+            object.rotation.set(
+              THREE.MathUtils.degToRad(Number(rotation[0] || 0)),
+              THREE.MathUtils.degToRad(Number(rotation[1] || 0)),
+              THREE.MathUtils.degToRad(Number(rotation[2] || 0))
+            );
+            return;
+          }
+          object.rotation.set(
+            THREE.MathUtils.degToRad(Number(rotation.x || 0)),
+            THREE.MathUtils.degToRad(Number(rotation.y || 0)),
+            THREE.MathUtils.degToRad(Number(rotation.z || 0))
+          );
+        }
+
+        function createLabelSprite(text, position) {
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          const fontSize = 28;
+          context.font = fontSize + "px system-ui, sans-serif";
+          const width = Math.ceil(context.measureText(text).width + 24);
+          canvas.width = width;
+          canvas.height = 44;
+          context.font = fontSize + "px system-ui, sans-serif";
+          context.fillStyle = "rgba(255,255,255,.88)";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.strokeStyle = "rgba(148,163,184,.7)";
+          context.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+          context.fillStyle = "#111827";
+          context.fillText(text, 12, 31);
+          const texture = new THREE.CanvasTexture(canvas);
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+          sprite.position.copy(position);
+          sprite.scale.set(width / 120, 0.36, 1);
+          return sprite;
+        }
+
+        function showGeometry3DError(container, error) {
+          container.innerHTML = "";
+          const message = document.createElement("div");
+          message.className = "geometry-error";
+          message.textContent = "Three.js 立体几何渲染失败：" + error.message;
+          container.appendChild(message);
+        }
+      `;
     }
 
     function renderCustomInteractiveExport(config, id) {
@@ -4636,10 +4861,13 @@ ${componentHtml}
 <body>
 <script>
 ${getCustomComponentRuntimeScript()}
-${drawStandardGeometry3D.toString()}
 <\/script>
 
 ${finalBody}
+
+<script type="module">
+${getGeometry3DModuleScript()}
+<\/script>
 
 <script>
   function checkChoice(id) {
