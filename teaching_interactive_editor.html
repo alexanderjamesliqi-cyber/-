@@ -2504,7 +2504,10 @@
       imageBlock.style.setProperty("--image-crop-y", `${safeCropY}%`);
       image.style.transform = `rotate(${safeRotation}deg)`;
       image.style.objectPosition = `${safeCropX}% ${safeCropY}%`;
-      if (safeWrap === "top-bottom" || safeWrap === "inline") {
+      if (safeWrap === "inline") {
+        imageBlock.style.marginLeft = safeAlignment === "right" ? "auto" : safeAlignment === "center" ? "auto" : "0";
+        imageBlock.style.marginRight = safeAlignment === "left" ? "8px" : safeAlignment === "center" ? "auto" : "0";
+      } else if (safeWrap === "top-bottom") {
         imageBlock.style.marginLeft = safeAlignment === "right" ? "auto" : safeAlignment === "center" ? "auto" : "0";
         imageBlock.style.marginRight = safeAlignment === "left" ? "auto" : safeAlignment === "center" ? "auto" : "0";
       } else {
@@ -2529,6 +2532,52 @@
       const width = getImageWidthPercent(selectedImageBlock);
       applyImageTransform(selectedImageBlock, width, rotation);
       document.getElementById("cfg-image-rotation-value").textContent = rotation;
+    }
+
+    function setImageFitMode(fit) {
+      if (!selectedImageBlock) return;
+      applyImageTransform(
+        selectedImageBlock,
+        getImageWidthPercent(selectedImageBlock),
+        getImageRotation(selectedImageBlock),
+        getImageAlignment(selectedImageBlock),
+        getImageWrap(selectedImageBlock),
+        fit
+      );
+      showImageConfig();
+    }
+
+    function setImageCropRatio(cropRatio) {
+      if (!selectedImageBlock) return;
+      applyImageTransform(
+        selectedImageBlock,
+        getImageWidthPercent(selectedImageBlock),
+        getImageRotation(selectedImageBlock),
+        getImageAlignment(selectedImageBlock),
+        getImageWrap(selectedImageBlock),
+        getImageFitMode(selectedImageBlock),
+        cropRatio
+      );
+      showImageConfig();
+    }
+
+    function previewImageCropPosition(axis, value) {
+      if (!selectedImageBlock) return;
+      const safeValue = clampInteger(value, 0, 100) ?? 50;
+      const cropX = axis === "x" ? safeValue : getImageCropPosition(selectedImageBlock, "x");
+      const cropY = axis === "y" ? safeValue : getImageCropPosition(selectedImageBlock, "y");
+      applyImageTransform(
+        selectedImageBlock,
+        getImageWidthPercent(selectedImageBlock),
+        getImageRotation(selectedImageBlock),
+        getImageAlignment(selectedImageBlock),
+        getImageWrap(selectedImageBlock),
+        getImageFitMode(selectedImageBlock),
+        getImageCropRatio(selectedImageBlock),
+        cropX,
+        cropY
+      );
+      document.getElementById(`cfg-image-crop-${axis}-value`).textContent = safeValue;
     }
 
     function setImageAlignment(alignment) {
@@ -2565,14 +2614,18 @@
         document.getElementById("cfg-image-width").value,
         document.getElementById("cfg-image-rotation").value,
         getImageAlignment(selectedImageBlock),
-        getImageWrap(selectedImageBlock)
+        getImageWrap(selectedImageBlock),
+        getImageFitMode(selectedImageBlock),
+        getImageCropRatio(selectedImageBlock),
+        document.getElementById("cfg-image-crop-x").value,
+        document.getElementById("cfg-image-crop-y").value
       );
       showImageConfig();
     }
 
     function resetImageConfig() {
       if (!selectedImageBlock) return;
-      applyImageTransform(selectedImageBlock, 70, 0, "center", "top-bottom");
+      applyImageTransform(selectedImageBlock, 70, 0, "center", "top-bottom", "cover", "original", 50, 50);
       showImageConfig();
     }
 
@@ -4432,6 +4485,23 @@ ${componentHtml}
       vertical-align: middle;
     }
 
+    .image-block[data-wrap="inline"][data-align="left"] {
+      margin-left: 0;
+      margin-right: 8px;
+    }
+
+    .image-block[data-wrap="inline"][data-align="center"] {
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .image-block[data-wrap="inline"][data-align="right"] {
+      display: block;
+      margin-left: auto;
+      margin-right: 0;
+    }
+
     .image-block[data-wrap="square-left"] {
       float: left;
       clear: none;
@@ -4450,6 +4520,8 @@ ${componentHtml}
       width: 100%;
       aspect-ratio: var(--image-aspect, 1.3333);
       line-height: 0;
+      overflow: hidden;
+      border-radius: 10px;
     }
 
     .image-block[data-quarter-turn="true"] .image-frame {
@@ -4468,6 +4540,11 @@ ${componentHtml}
       object-fit: cover;
       translate: -50% -50%;
       transform-origin: center center;
+    }
+
+    .image-block[data-fit="contain"] .editor-image {
+      object-fit: contain;
+      background: #ffffff;
     }
 
     .image-block[data-quarter-turn="true"] .editor-image {
