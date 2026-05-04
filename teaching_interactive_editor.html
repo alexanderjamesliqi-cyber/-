@@ -3434,17 +3434,9 @@ ${getGeometry3DModuleScript()}
     }
 
     function getAiRequestContext() {
-      const context = {
+      return {
         editorText: getEditorPlainText()
       };
-      if (selectedComponentId && componentData[selectedComponentId]) {
-        const data = componentData[selectedComponentId];
-        context.selectedComponent = {
-          type: data.type,
-          config: data.config
-        };
-      }
-      return context;
     }
 
     function looksLikeApiKey(value) {

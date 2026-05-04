@@ -111,11 +111,11 @@ COMPONENT_SYSTEM_PROMPT = "\n".join(
         'geometry-2d viewBox 形如 {"xMin":-6,"xMax":6,"yMin":-4,"yMax":4}。',
         "geometry-2d objects 支持：point {type,id,label,x,y}；segment {type,from,to}；line {type,from,to}；circle {type,center,radius}；polygon {type,points,label}；angle {type,a,o,b,label,radius}。",
         "geometry-3d defaultConfig 字段：title, summary, camera, objects, annotations, questions。",
-        'geometry-3d camera 形如 {"yaw":-45,"pitch":14,"distance":11}；需要观察双圆锥时使用较低 pitch，避免俯视导致下半圆锥被遮挡。',
+        'geometry-3d camera 形如 {"yaw":-45,"pitch":14,"distance":11}；必须根据用户最新需求选择视角，不要固定复用示例视角。',
         "geometry-3d objects 支持：point {type,id,label,x,y,z}；segment {type,from,to}；plane {type,points,label} 或 plane {type,center,width,height,rotation,label}；polyhedron {type,vertices,edges,faces,label}；cone {type,apex,baseCenter,radius,label}；double-cone {type,center,radius,height,label}；ellipse/curve {type,center,radiusX,radiusY,rotation,color,label}。",
-        'geometry-3d 坐标推荐使用对象格式，例如 {"x":0,"y":0,"z":0}；rotation 推荐 {"x":62,"y":0,"z":0}。',
-        '圆锥曲线示例 objects：{"type":"double-cone","center":{"x":0,"y":0,"z":0},"radius":1.8,"height":3.2,"label":"双圆锥"}，{"type":"plane","center":{"x":0,"y":0,"z":0.35},"width":4.2,"height":2.8,"rotation":{"x":62,"y":0,"z":0},"opacity":0.32,"label":"截面平面"}，{"type":"ellipse","center":{"x":0,"y":0,"z":0.35},"radiusX":1.25,"radiusY":0.48,"rotation":{"x":62,"y":0,"z":0},"color":14417920,"label":"截面曲线"}。',
-        "圆锥曲线、双圆锥、截面平面等立体几何定义组件必须优先使用 double-cone + plane + ellipse/curve，不要用大量 point/segment 近似圆锥表面。",
+        'geometry-3d 坐标推荐使用对象格式，例如 {"x":0,"y":0,"z":0}；rotation 推荐使用 {"x":角度,"y":角度,"z":角度}。',
+        "圆锥曲线、双圆锥、截面平面等立体几何定义组件必须优先使用 double-cone + plane + ellipse/curve，不要用大量 point/segment 近似圆锥表面；但 objects 的尺寸、平面高度、倾角、截线半径、颜色、标题、问题和 camera 必须按用户最新提示重新设计，不能照抄固定模板。",
+        "如果用户要求同一主题的不同讲法或修改提示词，必须显著改变组件的结构重点、可调参数、说明文案和观察问题。",
         "geometry-2d 和 geometry-3d 只返回结构化几何对象，不要写 htmlLines、cssLines、jsLines，不要写脚本。",
         "几何对象里的 from/to/points/center/a/o/b 可以引用 point 的 id。所有引用的点必须在 objects 中先定义。",
         "questions 是可选数组，每项可写 prompt 字段，用于给学生提问。",
@@ -256,9 +256,6 @@ def extract_component_request(payload):
                 or payload.get("editorText")
                 or ""
             ),
-            "selectedComponent": context.get("selectedComponent")
-            if isinstance(context.get("selectedComponent"), dict)
-            else None,
         }
 
     return None
@@ -271,19 +268,10 @@ def build_component_user_prompt(component_request):
     # Backward compatibility for older frontends. New frontends only send prompt.
     chat_context = str(component_request.get("chatContext") or "").strip()
     editor_text = str(component_request.get("editorText") or "").strip()
-    selected_component = component_request.get("selectedComponent")
     if chat_context:
         parts.extend(["", "最近对话：", chat_context[:4000]])
     if editor_text:
         parts.extend(["", "当前教学内容：", editor_text[:4000]])
-    if isinstance(selected_component, dict):
-        parts.extend(
-            [
-                "",
-                "当前选中组件：",
-                json.dumps(selected_component, ensure_ascii=False)[:4000],
-            ]
-        )
 
     return "\n".join(parts)
 
@@ -303,7 +291,7 @@ def prepare_model_payload(body, stream=False):
         {"role": "system", "content": COMPONENT_SYSTEM_PROMPT},
         {"role": "user", "content": build_component_user_prompt(component_request)},
     ]
-    payload["temperature"] = 0.2
+    payload["temperature"] = 0.45
     payload["max_tokens"] = 8192
     payload["stream"] = bool(stream)
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
