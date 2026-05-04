@@ -3434,14 +3434,7 @@ ${getGeometry3DModuleScript()}
         headers,
         body: {
           model,
-          max_tokens: 8192,
-          temperature: 0.2,
-          stream: Boolean(stream),
-          componentRequest: {
-            prompt: userPrompt || "请根据当前教学内容设计一个可复用的交互组件模板，加入左侧组件栏供用户拖拽使用。",
-            chatContext: getAiChatContext(),
-            editorText: getEditorPlainText()
-          }
+          prompt: userPrompt || "请根据当前教学内容设计一个可复用的交互组件模板，加入左侧组件栏供用户拖拽使用。"
         }
       };
     }

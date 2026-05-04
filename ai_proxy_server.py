@@ -212,54 +212,83 @@ def public_model_config(config=None):
     }
 
 
-def build_component_user_prompt(component_request):
-    prompt = str(
-        component_request.get("prompt")
-        or "请根据当前教学内容设计一个可复用的交互组件模板，加入左侧组件栏供用户拖拽使用。"
-    )
-    chat_context = str(component_request.get("chatContext") or "无")
-    editor_text = str(component_request.get("editorText") or "")
-
-    return "\n".join(
-        [
-            prompt,
-            "",
-            "最近对话：",
-            chat_context[:4000],
-            "",
-            "当前教学内容：",
-            editor_text[:4000],
-        ]
-    )
+DEFAULT_COMPONENT_USER_PROMPT = (
+    "请根据当前教学内容设计一个可复用的交互组件模板，加入左侧组件栏供用户拖拽使用。"
+)
 
 
-def prepare_model_payload(body):
+def read_proxy_payload(body):
     try:
-        payload = json.loads(body.decode("utf-8"))
+        return json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+def extract_component_request(payload):
+    if not isinstance(payload, dict):
+        return None
+
+    legacy_request = payload.get("componentRequest")
+    if isinstance(legacy_request, dict):
+        return {
+            "prompt": str(legacy_request.get("prompt") or DEFAULT_COMPONENT_USER_PROMPT),
+            "chatContext": str(legacy_request.get("chatContext") or ""),
+            "editorText": str(legacy_request.get("editorText") or ""),
+        }
+
+    if "prompt" in payload or "userPrompt" in payload:
+        return {
+            "prompt": str(
+                payload.get("prompt")
+                or payload.get("userPrompt")
+                or DEFAULT_COMPONENT_USER_PROMPT
+            )
+        }
+
+    return None
+
+
+def build_component_user_prompt(component_request):
+    prompt = str(component_request.get("prompt") or DEFAULT_COMPONENT_USER_PROMPT)
+    parts = [prompt]
+
+    # Backward compatibility for older frontends. New frontends only send prompt.
+    chat_context = str(component_request.get("chatContext") or "").strip()
+    editor_text = str(component_request.get("editorText") or "").strip()
+    if chat_context:
+        parts.extend(["", "最近对话：", chat_context[:4000]])
+    if editor_text:
+        parts.extend(["", "当前教学内容：", editor_text[:4000]])
+
+    return "\n".join(parts)
+
+
+def prepare_model_payload(body, stream=False):
+    payload = read_proxy_payload(body)
+    if payload is None:
         return body
 
-    component_request = payload.pop("componentRequest", None)
-    if not isinstance(component_request, dict):
+    component_request = extract_component_request(payload)
+    if not component_request:
         return body
 
+    model = str(payload.get("model") or "").strip()
+    payload = {"model": model} if model else {}
     payload["messages"] = [
         {"role": "system", "content": COMPONENT_SYSTEM_PROMPT},
         {"role": "user", "content": build_component_user_prompt(component_request)},
     ]
-    payload["temperature"] = min(float(payload.get("temperature") or 0.2), 0.2)
-    payload.setdefault("max_tokens", 8192)
+    payload["temperature"] = 0.2
+    payload["max_tokens"] = 8192
+    payload["stream"] = bool(stream)
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
 def read_component_request(body):
-    try:
-        payload = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    payload = read_proxy_payload(body)
+    if payload is None:
         return None
-
-    component_request = payload.get("componentRequest")
-    return component_request if isinstance(component_request, dict) else None
+    return extract_component_request(payload)
 
 
 def extract_json_like_text(text):
@@ -746,7 +775,7 @@ def ai_proxy():
 
     raw_body = request.get_data(cache=False)
     component_request = read_component_request(raw_body)
-    body = prepare_model_payload(raw_body)
+    body = prepare_model_payload(raw_body, stream=False)
     if len(body) > MAX_BODY_BYTES:
         return jsonify({"error": "Request body too large"}), 413
 
@@ -777,7 +806,7 @@ def ai_stream_proxy():
     if request.method == "OPTIONS":
         return Response(status=204)
 
-    body = prepare_model_payload(request.get_data(cache=False))
+    body = prepare_model_payload(request.get_data(cache=False), stream=True)
     if len(body) > MAX_BODY_BYTES:
         return jsonify({"error": "Request body too large"}), 413
 
