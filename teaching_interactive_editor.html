@@ -3009,6 +3009,9 @@ ${getGeometry3DModuleScript()}
 
       button.disabled = false;
       button.textContent = "停止生成";
+      aiDraftTemplates = [];
+      renderAiDraftPreview();
+      saveAiDraftTemplates();
       const receiveStats = { receivedChars: 0 };
       let stopWaitingStatus = () => {};
       let assistantMessage = null;
@@ -3413,16 +3416,6 @@ ${getGeometry3DModuleScript()}
       return normalized;
     }
 
-    function getAiChatContext() {
-      const recentChat = aiChatMessages
-        .slice(-8)
-        .filter(message => String(message.content || "").trim())
-        .map(message => `${message.role === "user" ? "用户" : "助手"}：${redactSensitiveText(message.content)}`)
-        .join("\\n");
-
-      return recentChat || "无";
-    }
-
     function buildAiRequest(provider, model, userPrompt, stream) {
       const headers = {
         "Content-Type": "application/json",
@@ -3435,12 +3428,23 @@ ${getGeometry3DModuleScript()}
         body: {
           model,
           prompt: userPrompt || "请根据当前教学内容设计一个可复用的交互组件模板，加入左侧组件栏供用户拖拽使用。",
-          context: {
-            chat: getAiChatContext(),
-            editorText: getEditorPlainText()
-          }
+          context: getAiRequestContext()
         }
       };
+    }
+
+    function getAiRequestContext() {
+      const context = {
+        editorText: getEditorPlainText()
+      };
+      if (selectedComponentId && componentData[selectedComponentId]) {
+        const data = componentData[selectedComponentId];
+        context.selectedComponent = {
+          type: data.type,
+          config: data.config
+        };
+      }
+      return context;
     }
 
     function looksLikeApiKey(value) {

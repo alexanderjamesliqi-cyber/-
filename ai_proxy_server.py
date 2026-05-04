@@ -256,6 +256,9 @@ def extract_component_request(payload):
                 or payload.get("editorText")
                 or ""
             ),
+            "selectedComponent": context.get("selectedComponent")
+            if isinstance(context.get("selectedComponent"), dict)
+            else None,
         }
 
     return None
@@ -268,10 +271,19 @@ def build_component_user_prompt(component_request):
     # Backward compatibility for older frontends. New frontends only send prompt.
     chat_context = str(component_request.get("chatContext") or "").strip()
     editor_text = str(component_request.get("editorText") or "").strip()
+    selected_component = component_request.get("selectedComponent")
     if chat_context:
         parts.extend(["", "最近对话：", chat_context[:4000]])
     if editor_text:
         parts.extend(["", "当前教学内容：", editor_text[:4000]])
+    if isinstance(selected_component, dict):
+        parts.extend(
+            [
+                "",
+                "当前选中组件：",
+                json.dumps(selected_component, ensure_ascii=False)[:4000],
+            ]
+        )
 
     return "\n".join(parts)
 
