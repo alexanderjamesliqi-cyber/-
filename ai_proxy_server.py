@@ -237,12 +237,25 @@ def extract_component_request(payload):
         }
 
     if "prompt" in payload or "userPrompt" in payload:
+        context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
         return {
             "prompt": str(
                 payload.get("prompt")
                 or payload.get("userPrompt")
                 or DEFAULT_COMPONENT_USER_PROMPT
-            )
+            ),
+            "chatContext": str(
+                context.get("chat")
+                or context.get("chatContext")
+                or payload.get("chatContext")
+                or ""
+            ),
+            "editorText": str(
+                context.get("editorText")
+                or context.get("editor")
+                or payload.get("editorText")
+                or ""
+            ),
         }
 
     return None
